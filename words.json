@@ -1,0 +1,366 @@
+{
+  "small": {
+    "count": 3,
+    "lastTime": 1765895225372,
+    "general": "小的；少的；不重要的；低微的",
+    "coding": "小写字母；小数据类型；小型化处理",
+    "phonetic": "[smɔːl]"
+  },
+  "joys": {
+    "count": 2,
+    "lastTime": 1765892767623,
+    "general": "喜悦；乐趣；令人高兴的事物",
+    "coding": "无特定编程含义",
+    "phonetic": "[ˈdʒɔɪz]"
+  },
+  "kind": {
+    "count": 1,
+    "lastTime": 1765892798976,
+    "general": "种类；类型；善良的，友好的",
+    "coding": "类型种类（如变量类型、数据种类）",
+    "phonetic": "[kaɪnd]"
+  },
+  "smile": {
+    "count": 2,
+    "lastTime": 1765893133983,
+    "general": "微笑；笑容；以微笑表示",
+    "coding": "无特定编程含义",
+    "phonetic": "[smɑɪl]"
+  },
+  "screenshot.htmi!": {
+    "count": 1,
+    "lastTime": 1765894367708,
+    "general": "屏幕截图文件（疑似拼写错误，正确应为 .html 或 .htm）",
+    "coding": "网页截图文件（通常指保存网页内容或截图的文件，但 .htmi 为无效扩展名，应为 .html）",
+    "phonetic": "[ˈskriːn.ʃɒt .eɪtʃ.tiː.em.aɪ]"
+  },
+  "deepseek": {
+    "count": 4,
+    "lastTime": 1765938595377,
+    "general": "深度求索；深度探索",
+    "coding": "深度求索（公司名，指一家专注于人工智能研究的公司）",
+    "phonetic": "[diːp siːk]"
+  },
+  "deepseek:": {
+    "count": 1,
+    "lastTime": 1765894725923,
+    "general": "深度探索；深入寻找",
+    "coding": "深度优先搜索（算法名称）",
+    "phonetic": "[diːp siːk]"
+  },
+  "electron": {
+    "count": 1,
+    "lastTime": 1765894880428,
+    "general": "电子（构成原子的基本粒子之一，带负电荷）",
+    "coding": "Electron（一个使用Web技术构建跨平台桌面应用程序的框架）",
+    "phonetic": "[ˈɪlektrɒn]"
+  },
+  "gemini": {
+    "count": 2,
+    "lastTime": 1765895101890,
+    "general": "双子座；双子（星座）；双胞胎之一",
+    "coding": "谷歌开发的多模态人工智能模型",
+    "phonetic": "[ˈdʒemɪnaɪ]"
+  },
+  "start": {
+    "count": 7,
+    "lastTime": 1765939511621,
+    "general": "开始；启动；出发；创办",
+    "coding": "启动进程/服务；开始执行程序；起始点",
+    "phonetic": "[stɑːrt]"
+  },
+  "\\deepseek-desktop>": {
+    "count": 1,
+    "lastTime": 1765895195502,
+    "general": "DeepSeek桌面版（DeepSeek桌面应用程序）",
+    "coding": "DeepSeek桌面客户端（通常指用于本地运行的AI模型开发工具或集成开发环境）",
+    "phonetic": "[ˈdiːpsiːk-ˈdesktɒp]"
+  },
+  "deepseek-desktop": {
+    "count": 4,
+    "lastTime": 1765936486101,
+    "general": "DeepSeek桌面应用程序",
+    "coding": "DeepSeek官方开发的桌面客户端软件，提供本地化AI助手功能",
+    "phonetic": "[diːp siːk ˈdesktɒp]"
+  },
+  "\\desktop\\": {
+    "count": 1,
+    "lastTime": 1765895821427,
+    "general": "桌面；台式电脑",
+    "coding": "桌面目录（通常指用户主目录下的Desktop文件夹）",
+    "phonetic": "[ˈdeskˌtɒp]"
+  },
+  "sk": {
+    "count": 1,
+    "lastTime": 1765896312453,
+    "general": "[苏格兰；苏格兰的；苏格兰人；苏格兰语]",
+    "coding": "[无通用编程含义，可能为特定缩写或标识符]",
+    "phonetic": "[sk]"
+  },
+  "false": {
+    "count": 1,
+    "lastTime": 1765934814688,
+    "general": "假的；错误的；不真实的；人造的",
+    "coding": "布尔值之一，表示逻辑上的“假”，通常与 true（真）相对",
+    "phonetic": "[ˈfɔːls]"
+  },
+  "maskedelement": {
+    "count": 2,
+    "lastTime": 1765935534924,
+    "general": "掩蔽元素；被遮盖的元素",
+    "coding": "被CSS属性`mask`或`mask-image`部分或完全隐藏的网页元素；也指在某些界面库（如React）中，因条件渲染而暂时不显示但仍存在于DOM结构中的元素。",
+    "phonetic": "[ˈmæskt ˈelɪmənt]"
+  },
+  "path": {
+    "count": 2,
+    "lastTime": 1765935828625,
+    "general": "小路，路径；路线，途径",
+    "coding": "路径，用于定位文件或目录在文件系统中的位置，通常由一系列目录名和文件名组成，用特定分隔符（如 / 或 \\）连接。",
+    "phonetic": "[ˈpæθ]"
+  },
+  "addeventlistener": {
+    "count": 2,
+    "lastTime": 1765936677937,
+    "general": "添加事件监听器",
+    "coding": "一种用于在DOM元素上注册事件处理程序的方法，用于指定当特定事件（如点击、按键等）发生时执行的函数。",
+    "phonetic": "[ˈæd ɪˈvɛn(t) lɪs(ə)nər]"
+  },
+  "getelementbyid": {
+    "count": 3,
+    "lastTime": 1765937111519,
+    "general": "通过ID获取元素",
+    "coding": "一个用于在HTML文档中通过元素的唯一ID属性查找并返回对应DOM元素节点的JavaScript方法",
+    "phonetic": "[ˈɡet ˈelɪmənt baɪ ˈaɪdi]"
+  },
+  "speakbtn": {
+    "count": 1,
+    "lastTime": 1765937118470,
+    "general": "说话按钮；语音按钮（指用于触发语音功能的图形界面按钮）",
+    "coding": "无",
+    "phonetic": "[spiːk bʌtn]"
+  },
+  "script": {
+    "count": 1,
+    "lastTime": 1765937344106,
+    "general": "剧本；脚本；笔迹；手写体；书写体系",
+    "coding": "无",
+    "phonetic": "[ˈskrɪpt]"
+  },
+  "resize": {
+    "count": 1,
+    "lastTime": 1765937616867,
+    "general": "调整大小；改变尺寸",
+    "coding": "无",
+    "phonetic": "[ˈriːˈsaɪz]"
+  },
+  "eventname": {
+    "count": 1,
+    "lastTime": 1765937723032,
+    "general": "事件名称",
+    "coding": "无",
+    "phonetic": "[ˈɪvent neɪm]"
+  },
+  "observe": {
+    "count": 1,
+    "lastTime": 1765937796586,
+    "general": "观察，注意到；遵守（规则、法律等）；庆祝（节日、仪式等）；评论，说",
+    "coding": "无",
+    "phonetic": "[英音]"
+  },
+  "tokenwarning": {
+    "count": 1,
+    "lastTime": 1765937889426,
+    "general": "令牌警告；象征性警告",
+    "coding": "令牌警告（通常指编译器或解释器对代码中令牌使用不当发出的警告信息）",
+    "phonetic": "[ˈtoʊkən ˈwɔːrnɪŋ]"
+  },
+  "writefilesync": {
+    "count": 1,
+    "lastTime": 1765938048438,
+    "general": "同步写入文件",
+    "coding": "Node.js 文件系统模块（fs）中的一个方法，用于将数据同步地写入文件。该方法会阻塞后续代码的执行，直到文件写入操作完成或发生错误。",
+    "phonetic": "[wraɪt faɪl sɪŋk]"
+  },
+  "document": {
+    "count": 1,
+    "lastTime": 1765938147865,
+    "general": "文件；文档；证明，记录",
+    "coding": "文档对象（通常指HTML/XML文档树结构中的根节点或表示整个文档的对象）",
+    "phonetic": "[ˈdɒkjumənt]"
+  },
+  "noun": {
+    "count": 1,
+    "lastTime": 1765938620882,
+    "general": "<b>[名词]</b> 名词",
+    "coding": "无",
+    "phonetic": ""
+  },
+  "book": {
+    "count": 1,
+    "lastTime": 1765938628555,
+    "general": "<b>[名词]</b> 书; 簿; 著作; 册; 书本<br><b>[动词]</b> 定",
+    "coding": "无",
+    "phonetic": ""
+  },
+  "index.html": {
+    "count": 1,
+    "lastTime": 1765938655171,
+    "general": "索引.html",
+    "coding": "无",
+    "phonetic": ""
+  },
+  "google": {
+    "count": 1,
+    "lastTime": 1765938990187,
+    "general": "谷歌",
+    "coding": "无",
+    "phonetic": ""
+  },
+  "nstart": {
+    "count": 1,
+    "lastTime": 1765939115951,
+    "general": "开始",
+    "coding": "无",
+    "phonetic": ""
+  },
+  "istart": {
+    "count": 1,
+    "lastTime": 1765939121975,
+    "general": "开始",
+    "coding": "无",
+    "phonetic": ""
+  },
+  "npm": {
+    "count": 1,
+    "lastTime": 1765939522551,
+    "general": "新项目管理",
+    "coding": "无",
+    "phonetic": ""
+  },
+  "screen": {
+    "count": 2,
+    "lastTime": 1765940592157,
+    "general": "<b>[名词]</b> 屏幕; 屏; 幕; 银幕; 屏风<br><b>[动词]</b> 屏蔽; 筛; 放映; 拍摄; 遮",
+    "coding": "无",
+    "phonetic": ""
+  },
+  "window": {
+    "count": 1,
+    "lastTime": 1765940720371,
+    "general": "窗户；窗口；视窗；一段时间",
+    "coding": "窗口；图形用户界面中的矩形区域，用于显示应用程序内容或与用户交互",
+    "phonetic": "[wɪndoʊ]"
+  },
+  "app": {
+    "count": 1,
+    "lastTime": 1765940797117,
+    "general": "应用程序（Application 的缩写，通常指手机或电脑上的应用软件）",
+    "coding": "应用程序（Application 的缩写，指为完成特定任务而开发的软件程序）",
+    "phonetic": "[ˈæp]"
+  },
+  "close-btn": {
+    "count": 1,
+    "lastTime": 1765941212058,
+    "general": "关闭按钮",
+    "coding": "关闭按钮（通常指图形用户界面中用于关闭窗口、对话框或模态框的交互元素）",
+    "phonetic": "[ˈkloʊz ˈbʌtən]"
+  },
+  "ds-section": {
+    "count": 1,
+    "lastTime": 1765941248267,
+    "general": "[数据段；数据节；数据部分]",
+    "coding": "[在汇编语言和可执行文件格式中，指存储已初始化的全局变量和静态变量的内存区域]",
+    "phonetic": "[ˈdiːˈes ˈsekʃn]"
+  },
+  "all": {
+    "count": 1,
+    "lastTime": 1765941615376,
+    "general": "所有的，全部的；完全地，都",
+    "coding": "表示全部元素或条件，如 SQL 中的 `SELECT * FROM` 或逻辑判断中的全称量词",
+    "phonetic": "[ˈɔːl]"
+  },
+  "display": {
+    "count": 2,
+    "lastTime": 1765941656082,
+    "general": "展示，陈列；显示，显露；表现，发挥",
+    "coding": "显示，指在屏幕等输出设备上呈现图形、文字等信息的过程或操作",
+    "phonetic": "[ˈdɪspleɪ]"
+  },
+  "width": {
+    "count": 1,
+    "lastTime": 1765941662786,
+    "general": "宽度；广度；某一物体或区域从一侧到另一侧的横向尺寸",
+    "coding": "数据宽度（指数据类型占用的存储位数或字节数）；元素宽度（指UI元素、图像、文本等在界面中的水平尺寸）",
+    "phonetic": "[wɪdθ]"
+  },
+  "open-dashboard": {
+    "count": 1,
+    "lastTime": 1765941723969,
+    "general": "开放式仪表板；指可公开访问、数据透明或允许用户自定义界面的信息展示面板。",
+    "coding": "开源或可集成的数据可视化面板，通常指可通过API接入数据、支持插件扩展的Web应用（如Grafana等）。",
+    "phonetic": "[ˈoʊpən ˈdæʃbɔːrd]"
+  },
+  "screenshot-ready": {
+    "count": 2,
+    "lastTime": 1765941733989,
+    "general": "截图就绪的；指内容、界面或状态已准备妥当，适合或即将进行屏幕截图。",
+    "coding": "指界面或数据已完全加载、渲染完毕，处于可被完整、清晰截取的状态，常用于自动化测试或文档生成前的检查点。",
+    "phonetic": "[ˈskriːnʃɒt-ˈredi]"
+  },
+  "mainwindow": {
+    "count": 5,
+    "lastTime": 1765942234438,
+    "general": "主窗口；指应用程序中占据主导地位、通常作为主要用户界面容器的窗口。",
+    "coding": "程序的主窗口对象，通常是应用程序启动时创建的第一个窗口，作为用户交互的主要界面和承载其他控件的容器。",
+    "phonetic": "[ˈmeɪn ˈwɪndoʊ]"
+  },
+  "start-translation": {
+    "count": 1,
+    "lastTime": 1765941771178,
+    "general": "开始翻译；启动翻译过程",
+    "coding": "启动翻译（通常指编译或解释过程中的词法、语法分析阶段）",
+    "phonetic": "[ˈstɑːrt trænsˈleɪʃn]"
+  },
+  "process": {
+    "count": 1,
+    "lastTime": 1765941781021,
+    "general": "过程；进程；方法；步骤；加工；处理",
+    "coding": "进程（操作系统资源分配和调度的基本单位）",
+    "phonetic": "[ˈprəʊses]"
+  },
+  "cat": {
+    "count": 1,
+    "lastTime": 1765941882298,
+    "general": "猫；猫科动物",
+    "coding": "无",
+    "phonetic": "[ˈkæt]"
+  },
+  "send": {
+    "count": 1,
+    "lastTime": 1765941895436,
+    "general": "发送，寄，派遣",
+    "coding": "无",
+    "phonetic": "[send]"
+  },
+  "setposition": {
+    "count": 1,
+    "lastTime": 1765941908242,
+    "general": "设置位置；定位",
+    "coding": "无",
+    "phonetic": "[ˈset pəˈzɪʃən]"
+  },
+  "ctrl": {
+    "count": 1,
+    "lastTime": 1765942107657,
+    "general": "控制键（计算机键盘上的按键，常与其他键组合使用执行特定操作）",
+    "coding": "无",
+    "phonetic": "[ˈkɒntrəl]"
+  },
+  "height": {
+    "count": 1,
+    "lastTime": 1765942206528,
+    "general": "高度；身高；海拔；高处",
+    "coding": "无",
+    "phonetic": "[haɪt]"
+  }
+}

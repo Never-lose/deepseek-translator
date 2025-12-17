@@ -1,0 +1,9 @@
+{
+  "engine": "deepseek",
+  "apiKey": "sk-e0959977b54444a3991364b2d7f3b17a",
+  "shortcutTranslate": "Ctrl+T",
+  "shortcutOcr": "Ctrl+Alt+Q",
+  "autoLaunch": false,
+  "enableCodeMode": false,
+  "enableCodeExplain": true
+}

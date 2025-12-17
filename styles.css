@@ -1,0 +1,82 @@
+.my-ds-popup {
+    position: static;
+    width: 100%;
+    height: 100vh;
+    background: #ffffff;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+    padding: 15px 18px;
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    color: #333;
+    overflow-y: auto; /* 允许内容滚动 */
+}
+
+/* 单词标题（大） */
+.ds-word-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: #000;
+    text-align: center;
+    margin-bottom: 5px;
+    word-break: break-word;
+}
+
+/* 句子标题（小）- 新增 */
+.ds-word-title-small {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+    max-height: 60px; /* 防止原文太长占满屏幕 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+
+.ds-header {
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.ds-phonetic-row {
+    display: block;
+    text-align: center;
+    color: #666;
+    font-family: "Lucida Sans Unicode", sans-serif;
+    font-size: 14px;
+}
+
+.ds-content {
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.ds-entry {
+    margin-bottom: 12px;
+}
+
+.ds-label {
+    font-weight: bold;
+    color: #000;
+    margin-right: 4px;
+}
+
+.ds-coding-block {
+    background-color: #f8f9fa;
+    padding: 8px;
+    border-radius: 4px;
+    border-left: 3px solid #2196F3;
+    margin-top: 4px;
+    font-size: 14px;
+}
+
+.ds-footer {
+    font-size: 12px;
+    color: #999;
+    border-top: 1px solid #eee;
+    padding-top: 8px;
+    margin-top: 15px;
+}

@@ -1,0 +1,55 @@
+{
+  "name": "deepseek-translator",
+  "version": "1.0.0",
+  "description": "DeepSeek 程序员翻译助手",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "author": "YourName",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "tesseract.js": "^5.1.0"
+  },
+  "build": {
+    "appId": "com.yourname.deepseektranslator",
+    "productName": "DeepSeek翻译助手",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DeepSeek翻译助手"
+    },
+    "files": [
+      "**/*",
+      "build/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "tessdata",
+        "to": "tessdata"
+      }
+    ]
+  }
+}

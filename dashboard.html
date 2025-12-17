@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>单词复习本</title>
+    <style>
+        body { 
+            font-family: "Segoe UI", sans-serif; padding: 20px; 
+            background: #f5f7fa; color: #333; transition: all 0.3s;
+        }
+        .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { margin: 0; color: #2c3e50; transition: color 0.3s; }
+        .action-btns { display: flex; gap: 10px; align-items: center; }
+        .btn { padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 5px; transition: all 0.2s; }
+        .btn-export { background: #e0f7fa; color: #006064; border: 1px solid #b2ebf2; }
+        .btn-export:hover { background: #b2ebf2; }
+        .btn-import { background: #e8f5e9; color: #1b5e20; border: 1px solid #c8e6c9; }
+        .btn-import:hover { background: #c8e6c9; }
+        .toolbar { display: flex; gap: 10px; margin-bottom: 15px; padding: 10px; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); align-items: center; }
+        .sort-label { font-size: 13px; font-weight: bold; color: #666; margin-right: 5px; }
+        .btn-pill { padding: 5px 12px; border: 1px solid #eee; background: #fff; border-radius: 20px; font-size: 12px; color: #555; cursor: pointer; transition: all 0.2s; }
+        .btn-pill:hover { background: #f0f0f0; }
+        .btn-pill.active { background: #2196F3; color: white; border-color: #2196F3; }
+        .btn-toggle-eye { background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }
+        .btn-toggle-eye:hover { background: #ffe0b2; }
+        .btn-toggle-eye.active { background: #ef6c00; color: white; border-color: #ef6c00; }
+        .stats-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; transition: all 0.3s; }
+        .stat-num { font-size: 24px; font-weight: bold; color: #2196F3; }
+        .stat-label { font-size: 12px; color: #7f8c8d; margin-top: 5px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); transition: background 0.3s; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; transition: border-color 0.3s; }
+        th { background: #fafafa; font-weight: bold; color: #555; transition: background 0.3s, color 0.3s; white-space: nowrap; }
+        tr:hover { background: #f9f9f9; }
+        .speak-btn-table { cursor: pointer; color: #999; margin-left: 5px; font-size: 14px; transition: color 0.2s; vertical-align: middle; display: inline-block; }
+        .speak-btn-table:hover { color: #2196F3; transform: scale(1.1); }
+        .phonetic-col { color: #7f8c8d; font-family: "Lucida Sans Unicode", sans-serif; font-size: 13px; }
+        .coding-col { color: #9c27b0; font-family: Consolas, monospace; font-size: 13px; }
+        .no-coding { color: #ccc; font-style: italic; }
+        .btn-delete { background: transparent; border: none; cursor: pointer; font-size: 16px; opacity: 0.6; transition: 0.2s; }
+        .btn-delete:hover { opacity: 1; transform: scale(1.2); }
+        .masked-text { filter: blur(5px); opacity: 0.5; user-select: none; transition: all 0.3s; cursor: pointer; }
+        .masked-text:hover { filter: blur(3px); opacity: 0.8; }
+        .revealed { filter: none; opacity: 1; }
+        body.dark-mode { background: #121212; color: #eee; }
+        body.dark-mode h1 { color: #fff; }
+        body.dark-mode .toolbar { background: #1e1e1e; box-shadow: 0 2px 5px rgba(255,255,255,0.05); }
+        body.dark-mode .sort-label { color: #aaa; }
+        body.dark-mode .btn-pill { background: #2d2d2d; border-color: #444; color: #ccc; }
+        body.dark-mode .btn-pill:hover { background: #3d3d3d; }
+        body.dark-mode .btn-pill.active { background: #2196F3; color: white; }
+        body.dark-mode .stat-card { background: #1e1e1e; color: #eee; box-shadow: 0 2px 5px rgba(255,255,255,0.05); }
+        body.dark-mode .stat-label { color: #aaa; }
+        body.dark-mode table { background: #1e1e1e; }
+        body.dark-mode th { background: #252526; color: #ccc; border-bottom-color: #333; }
+        body.dark-mode td { border-bottom-color: #333; }
+        body.dark-mode tr:hover { background: #2d2d2d; }
+        body.dark-mode .btn-export { background: #004d40; color: #b2dfdb; border-color: #00695c; }
+        body.dark-mode .btn-import { background: #1b5e20; color: #c8e6c9; border-color: #2e7d32; }
+        body.dark-mode .coding-col { color: #ce93d8; }
+    </style>
+</head>
+<body>
+    <div class="header-area">
+        <h1>📊 单词复习本</h1>
+        <div class="action-btns">
+            <button class="btn btn-import" id="btn-import">📂 导入数据</button>
+            <button class="btn btn-export" id="btn-export">💾 导出备份</button>
+        </div>
+    </div>
+    <div class="stats-container">
+        <div class="stat-card"><div class="stat-num" id="total-words">0</div><div class="stat-label">总词汇量</div></div>
+        <div class="stat-card"><div class="stat-num" id="today-words">0</div><div class="stat-label">今日查询</div></div>
+        <div class="stat-card"><div class="stat-num" id="top-word">-</div><div class="stat-label">最常查询</div></div>
+    </div>
+    <div class="toolbar">
+        <span class="sort-label">排序:</span>
+        <button id="sort-time" class="btn-pill active" onclick="changeSort('time')">🕒 时间</button>
+        <button id="sort-count" class="btn-pill" onclick="changeSort('count')">🔥 频率</button>
+        <div style="flex:1"></div>
+        <button id="btn-toggle-mask" class="btn-pill btn-toggle-eye" onclick="toggleMask()">👁️ 遮挡释义 (背单词)</button>
+    </div>
+    <table id="words-table">
+        <thead>
+            <tr>
+                <th width="15%">单词</th>
+                <th width="10%">音标</th>
+                <th width="25%">通用释义</th>
+                <th width="25%">💻 编程含义</th>
+                <th width="8%">次数</th>
+                <th width="12%">最后查询</th>
+                <th width="5%" style="text-align:center;">🗑️</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <input type="file" id="file-input" style="display: none;" accept=".json">
+    <script>
+        const { ipcRenderer } = require('electron');
+        const fs = require('fs');
+        const path = require('path');
+        const os = require('os');
+
+        const USER_DATA_PATH = ipcRenderer.sendSync('get-user-data-path');
+        const CONFIG_PATH = path.join(USER_DATA_PATH, 'config.json');
+        const DB_PATH = path.join(USER_DATA_PATH, 'words.json');
+
+        // 🆕 核心：监听实时刷新信号
+        ipcRenderer.on('refresh-data', () => {
+            loadData();
+        });
+
+        let currentSort = 'time'; 
+        let isMasked = false;     
+        let allWords = [];        
+
+        function loadConfig() { try { return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')); } catch(e) { return {}; } }
+        const config = loadConfig();
+        if (config.darkMode) document.body.classList.add('dark-mode');
+        ipcRenderer.on('theme-changed', (e, dark) => {
+            if (dark) document.body.classList.add('dark-mode');
+            else document.body.classList.remove('dark-mode');
+        });
+
+        window.speakWord = function(text) {
+            window.speechSynthesis.cancel();
+            const msg = new SpeechSynthesisUtterance(text);
+            msg.lang = 'en-US'; 
+            window.speechSynthesis.speak(msg);
+        }
+
+        window.deleteWord = function(wordToDelete) {
+            if (!confirm(`确定要删除单词 "${wordToDelete}" 吗？\n删除后不可恢复。`)) return;
+            try {
+                const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+                if (db[wordToDelete]) {
+                    delete db[wordToDelete];
+                    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+                    loadData(); 
+                }
+            } catch (e) { alert("删除失败: " + e.message); }
+        }
+
+        function loadData() {
+            if (!fs.existsSync(DB_PATH)) return;
+            try {
+                const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+                allWords = Object.keys(db).map(k => ({ word: k, ...db[k] }));
+                document.getElementById('total-words').innerText = allWords.length;
+                const today = new Date().setHours(0,0,0,0);
+                const todayCount = allWords.filter(w => w.lastTime > today).length;
+                document.getElementById('today-words').innerText = todayCount;
+                if (allWords.length > 0) {
+                    const top = [...allWords].sort((a,b) => b.count - a.count)[0];
+                    document.getElementById('top-word').innerText = top.word;
+                } else { document.getElementById('top-word').innerText = "-"; }
+                renderTable();
+            } catch(e) {}
+        }
+
+        function renderTable() {
+            let displayWords = [...allWords];
+            if (currentSort === 'time') { displayWords.sort((a, b) => b.lastTime - a.lastTime); } 
+            else { displayWords.sort((a, b) => b.count - a.count); }
+            const tbody = document.querySelector('#words-table tbody');
+            tbody.innerHTML = displayWords.map(w => {
+                const maskClass = isMasked ? 'masked-text' : '';
+                const general = w.general ? w.general.replace(/<br>/g, '; ').substring(0, 30) + (w.general.length > 30 ? '...' : '') : '';
+                let coding = w.coding && w.coding !== "无" ? w.coding : '-';
+                let codingClass = w.coding && w.coding !== "无" ? 'coding-col' : 'no-coding';
+                if (coding.length > 30) coding = coding.substring(0, 30) + '...';
+                return `
+                <tr>
+                    <td style="font-weight:bold;color:#2196F3">${w.word}<span class="speak-btn-table" onclick="speakWord('${w.word}')">🔊</span></td>
+                    <td class="phonetic-col">${w.phonetic || ''}</td>
+                    <td class="${maskClass}" onclick="this.classList.add('revealed')" title="点击显示">${general}</td>
+                    <td class="${codingClass} ${maskClass}" onclick="this.classList.add('revealed')" title="点击显示">${coding}</td>
+                    <td>${w.count}</td>
+                    <td style="font-size:12px;color:#999">${new Date(w.lastTime).toLocaleString()}</td>
+                    <td style="text-align:center;"><button class="btn-delete" onclick="deleteWord('${w.word}')" title="删除">🗑️</button></td>
+                </tr>`}).join('');
+        }
+
+        window.changeSort = function(type) {
+            currentSort = type;
+            document.getElementById('sort-time').classList.toggle('active', type === 'time');
+            document.getElementById('sort-count').classList.toggle('active', type === 'count');
+            renderTable();
+        }
+
+        window.toggleMask = function() {
+            isMasked = !isMasked;
+            const btn = document.getElementById('btn-toggle-mask');
+            btn.classList.toggle('active', isMasked);
+            btn.innerText = isMasked ? '🐵 已开启遮挡' : '👁️ 遮挡释义 (背单词)';
+            renderTable();
+        }
+
+        loadData();
+
+        document.getElementById('btn-export').addEventListener('click', () => {
+            if (!fs.existsSync(DB_PATH)) { alert('⚠️ 无数据'); return; }
+            const data = fs.readFileSync(DB_PATH, 'utf-8');
+            const desktopPath = path.join(os.homedir(), 'Desktop', `deepseek_words_backup.json`);
+            try { fs.writeFileSync(desktopPath, data); alert(`✅ 已导出到桌面`); } catch (e) { alert('❌ 导出失败: ' + e.message); }
+        });
+
+        const fileInput = document.getElementById('file-input');
+        document.getElementById('btn-import').addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const newData = JSON.parse(event.target.result);
+                    let currentData = {};
+                    if (fs.existsSync(DB_PATH)) currentData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+                    let count = 0;
+                    for (const word in newData) {
+                        if (currentData[word]) {
+                            currentData[word].count = Math.max(currentData[word].count, newData[word].count);
+                            currentData[word].lastTime = Math.max(currentData[word].lastTime, newData[word].lastTime);
+                        } else { currentData[word] = newData[word]; count++; }
+                    }
+                    fs.writeFileSync(DB_PATH, JSON.stringify(currentData, null, 2));
+                    alert(`✅ 成功导入 ${count} 个新单词`);
+                    loadData(); 
+                } catch (err) { alert('❌ 格式错误'); }
+            };
+            reader.readAsText(file);
+            fileInput.value = '';
+        });
+    </script>
+</body>
+</html>
