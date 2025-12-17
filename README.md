@@ -40,9 +40,9 @@
 
 |                     **设置 (深色模式)**                      |                        **单词复习本**                        |
 | :----------------------------------------------------------: | :----------------------------------------------------------: |
-| <img src="https://via.placeholder.com/400x200?text=Translation+Card" alt="主界面" width="100%"> | <img src="https://via.placeholder.com/400x200?text=Dashboard" alt="复习本" width="100%"> |
+| <img src="assets/settings.png" alt="设置界面" width="100%"> | <img src="assets/dashboard.png" alt="复习本" width="100%"> |
 
-*(注：请在实际部署后替换上方图片链接)*
+
 
 ---
 
