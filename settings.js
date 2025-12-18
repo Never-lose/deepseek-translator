@@ -8,31 +8,42 @@ const CONFIG_PATH = path.join(USER_DATA_PATH, 'config.json');
 const DEFAULT_CONFIG = {
     engine: "google",
     apiKey: "",
+    mimoKey: "",
+    mimoModel: "mimo-v2-flash",
+    mimoUrl: "https://api.xiaomimimo.com/v1",
+    mimoEnableCodeMode: true,
+    mimoEnableCodeExplain: true,
     shortcutTranslate: "Ctrl+Q",
     shortcutOcr: "Ctrl+Alt+Q",
     autoLaunch: false,
     enableCodeMode: true,
     enableCodeExplain: true,
-    darkMode: false // 默认关闭
+    darkMode: false
 };
 
 const apiKeyInput = document.getElementById('apiKey');
+const mimoKeyInput = document.getElementById('mimoKey');
 const translateInput = document.getElementById('shortcutTranslate');
 const ocrInput = document.getElementById('shortcutOcr');
 const autoLaunchCheckbox = document.getElementById('autoLaunch');
 const btnSave = document.getElementById('btnSave');
+const darkModeCheckbox = document.getElementById('darkMode');
 
-// DeepSeek 相关
 const codeModeCheckbox = document.getElementById('enableCodeMode');
 const codeExplainCheckbox = document.getElementById('enableCodeExplain');
 const codeExplainGroup = document.getElementById('codeExplainGroup');
 
-// 🆕 暗黑模式开关
-const darkModeCheckbox = document.getElementById('darkMode');
+const mimoCodeModeCheckbox = document.getElementById('mimoEnableCodeMode');
+const mimoCodeExplainCheckbox = document.getElementById('mimoEnableCodeExplain');
+const mimoCodeExplainGroup = document.getElementById('mimoCodeExplainGroup');
 
 const cardGoogle = document.getElementById('card-google');
 const cardDeepseek = document.getElementById('card-deepseek');
+const cardXiaomi = document.getElementById('card-xiaomi');
+
 const deepseekSettings = document.getElementById('deepseek-settings');
+const xiaomiSettings = document.getElementById('xiaomi-settings');
+
 let currentEngine = "google";
 
 function loadConfig() {
@@ -46,27 +57,28 @@ function loadConfig() {
 }
 
 const config = loadConfig();
-// 初始化各控件
-apiKeyInput.value = config.apiKey;
+
+apiKeyInput.value = config.apiKey || "";
+mimoKeyInput.value = config.mimoKey || "";
 translateInput.value = config.shortcutTranslate;
 ocrInput.value = config.shortcutOcr;
 autoLaunchCheckbox.checked = config.autoLaunch;
-codeModeCheckbox.checked = config.enableCodeMode;
-codeExplainCheckbox.checked = config.enableCodeExplain;
 darkModeCheckbox.checked = config.darkMode;
 
-// 初始化主题 (设置窗口自己也要变色)
+codeModeCheckbox.checked = config.enableCodeMode;
+codeExplainCheckbox.checked = config.enableCodeExplain;
+
+mimoCodeModeCheckbox.checked = config.mimoEnableCodeMode !== undefined ? config.mimoEnableCodeMode : true;
+mimoCodeExplainCheckbox.checked = config.mimoEnableCodeExplain !== undefined ? config.mimoEnableCodeExplain : true;
+
 applyTheme(config.darkMode);
 
-// 监听主题开关
 darkModeCheckbox.addEventListener('change', () => {
     const isDark = darkModeCheckbox.checked;
     applyTheme(isDark);
-    // 📢 告诉主进程：主题变了，快通知大家！
     ipcRenderer.send('save-dark-mode', isDark);
 });
 
-// 监听外界发来的主题变化 (防止多窗口不同步)
 ipcRenderer.on('theme-changed', (event, isDark) => {
     darkModeCheckbox.checked = isDark;
     applyTheme(isDark);
@@ -77,34 +89,51 @@ function applyTheme(dark) {
     else document.body.classList.remove('dark-mode');
 }
 
-function updateSubSettings() {
-    if (codeModeCheckbox.checked) {
-        codeExplainGroup.classList.add('visible');
-    } else {
-        codeExplainGroup.classList.remove('visible');
-    }
-    setTimeout(() => {
-        const height = document.body.scrollHeight;
-        ipcRenderer.send('resize-settings-window', height);
-    }, 50);
+function updateDeepSeekSub() {
+    if (codeModeCheckbox.checked) codeExplainGroup.classList.add('visible');
+    else codeExplainGroup.classList.remove('visible');
+    requestResize();
 }
-codeModeCheckbox.addEventListener('change', updateSubSettings);
-updateSubSettings();
+function updateXiaomiSub() {
+    if (mimoCodeModeCheckbox.checked) mimoCodeExplainGroup.classList.add('visible');
+    else mimoCodeExplainGroup.classList.remove('visible');
+    requestResize();
+}
 
+codeModeCheckbox.addEventListener('change', updateDeepSeekSub);
+mimoCodeModeCheckbox.addEventListener('change', updateXiaomiSub);
+
+updateDeepSeekSub();
+updateXiaomiSub();
+
+// 💎 核心修复：限制设置窗口的最大高度
+function requestResize() {
+    setTimeout(() => {
+        const contentHeight = document.body.scrollHeight + 20; 
+        // 限制最大高度 580px，防止撑爆屏幕
+        const MAX_HEIGHT = 580; 
+        const targetHeight = Math.min(contentHeight, MAX_HEIGHT);
+        ipcRenderer.send('resize-settings-window', targetHeight);
+    }, 100);
+}
 
 window.selectEngine = function(engine) {
     currentEngine = engine;
-    if (engine === 'google') {
-        cardGoogle.classList.add('active');
-        cardDeepseek.classList.remove('active');
-        deepseekSettings.style.display = 'none'; 
-        setTimeout(() => ipcRenderer.send('resize-settings-window', document.body.scrollHeight), 50);
-    } else {
+    cardGoogle.classList.remove('active');
+    cardDeepseek.classList.remove('active');
+    cardXiaomi.classList.remove('active');
+    deepseekSettings.classList.remove('visible');
+    xiaomiSettings.classList.remove('visible');
+
+    if (engine === 'google') cardGoogle.classList.add('active');
+    else if (engine === 'deepseek') {
         cardDeepseek.classList.add('active');
-        cardGoogle.classList.remove('active');
-        deepseekSettings.style.display = 'block'; 
-        setTimeout(() => ipcRenderer.send('resize-settings-window', document.body.scrollHeight), 50);
+        deepseekSettings.classList.add('visible');
+    } else if (engine === 'xiaomi') {
+        cardXiaomi.classList.add('active');
+        xiaomiSettings.classList.add('visible');
     }
+    requestResize();
 }
 selectEngine(config.engine || 'google');
 
@@ -116,7 +145,6 @@ function recordShortcut(inputElement) {
         if (e.ctrlKey) keys.push('Ctrl');
         if (e.altKey) keys.push('Alt');
         if (e.shiftKey) keys.push('Shift');
-        if (e.metaKey) keys.push('Super');
         let key = e.key.toUpperCase();
         if (key === ' ') key = 'Space';
         keys.push(key);
@@ -127,30 +155,34 @@ recordShortcut(translateInput);
 recordShortcut(ocrInput);
 
 btnSave.addEventListener('click', () => {
-    // 这里其实不需要手动保存 darkMode 了，因为 checkbox change 时已经实时保存了
-    // 但为了统一，这里只保存其他配置
     const newConfig = {
-        ...loadConfig(), // 读取最新配置（含darkMode）
+        ...loadConfig(),
         engine: currentEngine,
         apiKey: apiKeyInput.value.trim(),
+        mimoKey: mimoKeyInput.value.trim(),
+        mimoModel: "mimo-v2-flash",
+        mimoUrl: "https://api.xiaomimimo.com/v1",
         shortcutTranslate: translateInput.value,
         shortcutOcr: ocrInput.value,
         autoLaunch: autoLaunchCheckbox.checked,
         enableCodeMode: codeModeCheckbox.checked,
-        enableCodeExplain: codeExplainCheckbox.checked
+        enableCodeExplain: codeExplainCheckbox.checked,
+        mimoEnableCodeMode: mimoCodeModeCheckbox.checked,
+        mimoEnableCodeExplain: mimoCodeExplainCheckbox.checked
     };
 
     try {
         fs.writeFileSync(CONFIG_PATH, JSON.stringify(newConfig, null, 2));
         ipcRenderer.send('settings-updated');
-        alert('✅ 设置已保存！');
+        const btn = document.getElementById('btnSave');
+        const originalText = btn.innerText;
+        btn.innerText = "✅ 已保存";
+        btn.style.background = "#4CAF50";
+        setTimeout(() => { btn.innerText = originalText; btn.style.background = ""; }, 1500);
     } catch (e) {
         alert('❌ 保存失败: ' + e.message);
     }
 });
 
-const observer = new ResizeObserver(() => {
-    const height = document.body.scrollHeight;
-    ipcRenderer.send('resize-settings-window', height);
-});
+const observer = new ResizeObserver(() => requestResize());
 observer.observe(document.body);

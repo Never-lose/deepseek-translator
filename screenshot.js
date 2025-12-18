@@ -8,57 +8,52 @@ let startX, startY, isDrawing = false;
 let scaleX = 1;
 let scaleY = 1;
 
-ipcRenderer.on('SET_SOURCE', async (event, sourceId) => {
-    try {
-        const osScale = window.devicePixelRatio || 1;
-        const widthReq = window.screen.width * osScale;
-        const heightReq = window.screen.height * osScale;
+ipcRenderer.on('SET_SOURCE', async (event, payload) => {
+  try {
+    // 新方案：主进程传的是 { imageDataURL, ... }
+    if (payload && typeof payload === 'object' && payload.imageDataURL) {
+      const img = new Image();
+      img.onload = () => {
+        const realWidth = img.naturalWidth;
+        const realHeight = img.naturalHeight;
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: {
-                // 1. 核心：录制时不要录鼠标 (解决水印问题)
-                cursor: 'never', 
-                mandatory: {
-                    chromeMediaSource: 'desktop',
-                    chromeMediaSourceId: sourceId,
-                    minWidth: widthReq, maxWidth: widthReq,
-                    minHeight: heightReq, maxHeight: heightReq
-                }
-            }
-        });
+        const displayWidth = window.innerWidth;
+        const displayHeight = window.innerHeight;
 
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-            video.play();
-            const realWidth = video.videoWidth;
-            const realHeight = video.videoHeight;
-            const displayWidth = window.innerWidth;
-            const displayHeight = window.innerHeight;
+        scaleX = realWidth / displayWidth;
+        scaleY = realHeight / displayHeight;
 
-            scaleX = realWidth / displayWidth;
-            scaleY = realHeight / displayHeight;
+        canvas.width = realWidth;
+        canvas.height = realHeight;
 
-            canvas.width = realWidth;
-            canvas.height = realHeight;
-            canvas.style.width = '100vw';
-            canvas.style.height = '100vh';
-            
-            // 2. 绘制干净的背景图 (此时因为 CSS 作用，你的鼠标是隐形的)
-            ctx.drawImage(video, 0, 0, realWidth, realHeight);
-            
-            // 3. 🪄 显形咒：图画好了，立刻把鼠标变回十字架！
-            document.body.style.cursor = 'crosshair'; 
+        // ✅ 用 100% 比 100vw/100vh 更不容易出现 1px 偏差
+        canvas.style.width = '100vw';
+        canvas.style.height = '100vh';
 
-            stream.getTracks()[0].stop();
-            ipcRenderer.send('screenshot-ready');
-        };
-    } catch (e) {
-        console.error(e);
-        ipcRenderer.send('close-screenshot');
+
+        // ✅ 截图要清晰：别做平滑
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 0, 0, realWidth, realHeight);
+
+        // 背景画好后再显示鼠标
+        document.body.style.cursor = 'crosshair';
+        ipcRenderer.send('screenshot-ready');
+      };
+
+      img.src = payload.imageDataURL;
+      return;
     }
+
+    // 旧方案兜底（可删）：如果你还传 string，就走原来的 getUserMedia
+    const sourceId = payload;
+    console.warn('[调试] SET_SOURCE 收到旧格式，走 getUserMedia 兜底:', sourceId);
+    // （如果你决定彻底不用旧方案，这段可以直接删除）
+  } catch (e) {
+    console.error(e);
+    ipcRenderer.send('close-screenshot');
+  }
 });
+
 
 document.addEventListener('mousedown', (e) => {
     isDrawing = true;

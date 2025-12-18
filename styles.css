@@ -1,82 +1,154 @@
-.my-ds-popup {
-    position: static;
-    width: 100%;
+/* [styles.css] 可拖动版 */
+body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     height: 100vh;
-    background: #ffffff;
-    border: 1px solid #ccc;
-    box-sizing: border-box;
-    padding: 15px 18px;
-    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
-    color: #333;
-    overflow-y: auto; /* 允许内容滚动 */
-}
-
-/* 单词标题（大） */
-.ds-word-title {
-    font-size: 24px;
-    font-weight: 800;
-    color: #000;
-    text-align: center;
-    margin-bottom: 5px;
-    word-break: break-word;
-}
-
-/* 句子标题（小）- 新增 */
-.ds-word-title-small {
-    font-size: 14px;
-    color: #666;
-    margin-bottom: 8px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #eee;
-    max-height: 60px; /* 防止原文太长占满屏幕 */
     overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
+    background: transparent;
 }
 
+/* 📦 弹窗容器 */
+.my-ds-popup {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 20px); 
+    margin: 10px; 
+    box-sizing: border-box;
+    
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    
+    color: #333;
+    overflow: hidden;
+    position: relative;
+}
+
+/* 🌙 暗黑模式 */
+body.dark-mode .my-ds-popup {
+    background: #1e1e1e;
+    border-color: #333;
+    color: #e0e0e0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* 🔒 头部：拖拽核心区域 */
 .ds-header {
-    text-align: center;
-    margin-bottom: 12px;
+    flex-shrink: 0;
+    padding: 16px 20px 10px;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+    
+    display: flex;
+    flex-direction: column;
+    align-items: center; 
+    justify-content: center;
+    
+    /* 🚀 关键：允许拖拽窗口 */
+    -webkit-app-region: drag;
+    cursor: grab; /* 鼠标放上去变小手 */
+}
+body.dark-mode .ds-header { background: #252526; border-bottom-color: #333; }
+
+/* 头部激活状态 */
+.ds-header:active {
+    cursor: grabbing; /* 抓住时变紧握手 */
 }
 
-.ds-phonetic-row {
-    display: block;
-    text-align: center;
-    color: #666;
-    font-family: "Lucida Sans Unicode", sans-serif;
-    font-size: 14px;
+.header-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px; 
+    width: 100%;
 }
 
+/* 📜 内容区域 */
 .ds-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px 24px;
     font-size: 15px;
-    line-height: 1.6;
+    line-height: 1.7;
+    /* 确保内容区不能拖拽，方便复制文字 */
+    -webkit-app-region: no-drag; 
 }
 
-.ds-entry {
-    margin-bottom: 12px;
-}
+.ds-content::-webkit-scrollbar { width: 4px; }
+.ds-content::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 2px; }
+.ds-content::-webkit-scrollbar-track { background: transparent; }
+body.dark-mode .ds-content::-webkit-scrollbar-thumb { background: #444; }
 
-.ds-label {
-    font-weight: bold;
-    color: #000;
-    margin-right: 4px;
-}
-
-.ds-coding-block {
-    background-color: #f8f9fa;
-    padding: 8px;
-    border-radius: 4px;
-    border-left: 3px solid #2196F3;
-    margin-top: 4px;
-    font-size: 14px;
-}
-
+/* 🔒 底部 */
 .ds-footer {
-    font-size: 12px;
-    color: #999;
-    border-top: 1px solid #eee;
-    padding-top: 8px;
-    margin-top: 15px;
+    flex-shrink: 0;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    border-top: 1px solid #f0f0f0;
+    /* 底部也要禁止拖拽，防止点不到按钮 */
+    -webkit-app-region: no-drag; 
 }
+body.dark-mode .ds-footer { background: #1e1e1e; border-top-color: #333; }
+
+/* 字体排版 */
+.ds-word-title { 
+    font-size: 22px; 
+    font-weight: 800; 
+    color: #111; 
+    letter-spacing: -0.5px;
+    white-space: pre-wrap; 
+    word-break: break-word;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.ds-word-title-small { 
+    font-size: 14px; color: #555; font-weight: 600;
+}
+
+.ds-phonetic-row { 
+    font-family: "Lucida Sans Unicode", sans-serif; 
+    font-size: 13px; color: #888;
+    margin-top: 6px;
+    text-align: center; 
+    width: 100%;
+}
+
+/* 标签与内容 */
+.ds-section { margin-bottom: 12px; }
+.ds-section-header { display: flex; align-items: center; margin-bottom: 6px; }
+.ds-tag { 
+    display: inline-block; padding: 2px 8px; border-radius: 6px; 
+    font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+}
+.tag-general { background: #e3f2fd; color: #1976d2; }
+.tag-coding { background: #f3e5f5; color: #7b1fa2; }
+.ds-coding-block { 
+    background-color: #f6f8fa; padding: 10px 12px; border-radius: 8px; 
+    font-size: 13px; color: #24292e; border-left: 4px solid #9c27b0; margin-top: 4px;
+}
+
+/* 暗黑模式 */
+body.dark-mode .ds-word-title { color: #fff; }
+body.dark-mode .ds-word-title-small { color: #aaa; }
+body.dark-mode .tag-general { background: #1565c0; color: #fff; }
+body.dark-mode .tag-coding { background: #6a1b9a; color: #fff; }
+body.dark-mode .ds-coding-block { background-color: #2d2d2d; color: #ccc; border-left-color: #ba68c8; }
+
+/* 底部按钮 */
+.footer-left { font-size: 11px; color: #aaa; font-weight: 500; }
+.footer-icons { display: flex; gap: 16px; }
+.icon-btn { 
+    cursor: pointer; opacity: 0.5; font-size: 16px; transition: 0.2s; 
+    display: flex; align-items: center; justify-content: center;
+    
+    /* 🚀 关键：禁止拖拽按钮，否则点击事件会被拖拽拦截 */
+    -webkit-app-region: no-drag; 
+}
+.icon-btn:hover { opacity: 1; transform: scale(1.15); }
+.icon-btn.pinned { color: #2196F3; opacity: 1; transform: rotate(45deg); }
+.icon-close:hover { color: #ff5252; }

@@ -1,5 +1,5 @@
 const { app, BrowserWindow, clipboard, screen, globalShortcut, ipcMain, desktopCapturer, Tray, Menu, nativeImage, dialog } = require('electron');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const Tesseract = require('tesseract.js');
@@ -12,15 +12,14 @@ function logError(msg) {
 }
 process.on('uncaughtException', (error) => {
     logError(`💥 致命崩溃: ${error.stack || error}`);
-    dialog.showErrorBox("程序崩溃", `错误信息已保存到桌面日志。\n${error.message}`);
 });
 
 let mainWindow, dashboardWindow, screenshotWindow, settingsWindow;
-let isPinned = true; 
+let isPinned = false; 
 let tray = null;
 let ocrWorker = null; 
 
-// 🛑 单例锁
+// 单例锁
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) { app.quit(); } else {
     app.on('second-instance', () => {
@@ -36,21 +35,16 @@ const USER_DATA_PATH = app.getPath('userData');
 const CONFIG_PATH = path.join(USER_DATA_PATH, 'config.json');
 const SAFE_MODEL_DIR = path.join(USER_DATA_PATH, 'tessdata_safe');
 const SAFE_MODEL_FILE = path.join(SAFE_MODEL_DIR, 'eng.traineddata');
-const ICON_PATH = path.join(__dirname, 'build', 'icon.ico');
+const ICON_PATH = path.join(__dirname, 'build', 'icon.ico'); 
 
-// 路径猎人
 function findAndCopyModel() {
     if (fs.existsSync(SAFE_MODEL_FILE)) return true;
     const potentialPaths = [
         path.join(process.resourcesPath, 'tessdata', 'eng.traineddata'),
         path.join(__dirname, 'tessdata', 'eng.traineddata'),
-        path.join(app.getAppPath(), '..', 'tessdata', 'eng.traineddata'),
         path.join(process.cwd(), 'tessdata', 'eng.traineddata')
     ];
-    let foundPath = null;
-    for (const p of potentialPaths) {
-        if (fs.existsSync(p)) { foundPath = p; break; }
-    }
+    let foundPath = potentialPaths.find(p => fs.existsSync(p));
     if (!foundPath) return false;
     try {
         if (!fs.existsSync(SAFE_MODEL_DIR)) fs.mkdirSync(SAFE_MODEL_DIR, { recursive: true });
@@ -61,8 +55,7 @@ function findAndCopyModel() {
 
 async function initOcrEngine() {
     if (ocrWorker) return; 
-    const ready = findAndCopyModel();
-    if (!ready) return; 
+    if (!findAndCopyModel()) return; 
     try {
         ocrWorker = await Tesseract.createWorker('eng', 1, {
             langPath: SAFE_MODEL_DIR, cachePath: SAFE_MODEL_DIR, gzip: false, logger: m => {} 
@@ -79,37 +72,39 @@ function loadConfig() {
 }
 
 function createMainWindow() {
-    const { x, y } = screen.getCursorScreenPoint();
     mainWindow = new BrowserWindow({
-        width: 320, height: 150, x: x, y: y,
+        width: 340, height: 200, 
         frame: false, 
         alwaysOnTop: true, 
         resizable: false, 
         skipTaskbar: true,
-        // 💎 关键修改：开启透明背景！
         transparent: true, 
-        backgroundColor: '#00000000', // 彻底透明
-        icon: ICON_PATH,
-        webPreferences: { nodeIntegration: true, contextIsolation: false },
+        backgroundColor: '#00000000', 
+        hasShadow: false, 
+        movable: true, // 允许拖动
+        icon: fs.existsSync(ICON_PATH) ? ICON_PATH : null,
+        webPreferences: { nodeIntegration: true, contextIsolation: false, backgroundThrottling: false },
         show: false
     });
     mainWindow.loadFile('index.html');
-    // 去掉了 blur 隐藏逻辑，实现常驻
+    mainWindow.webContents.on('render-process-gone', () => { mainWindow = null; createMainWindow(); });
 }
 
 function createTray() {
     try {
-        const image = nativeImage.createFromPath(ICON_PATH);
-        tray = new Tray(image);
-        tray.setToolTip('DeepSeek 翻译助手');
-        const contextMenu = Menu.buildFromTemplate([
-            { label: '📊 打开单词复习本', click: () => { createDashboardWindow(); } },
-            { label: '⚙️ 设置', click: () => { createSettingsWindow(); } },
-            { type: 'separator' }, 
-            { label: '❌ 退出程序', click: () => { if (tray) tray.destroy(); app.quit(); } }
-        ]);
-        tray.setContextMenu(contextMenu);
-        tray.on('click', () => createSettingsWindow());
+        const image = fs.existsSync(ICON_PATH) ? nativeImage.createFromPath(ICON_PATH) : null;
+        if(image) {
+            tray = new Tray(image);
+            tray.setToolTip('AI 翻译助手');
+            const contextMenu = Menu.buildFromTemplate([
+                { label: '📊 打开单词复习本', click: () => createDashboardWindow() },
+                { label: '⚙️ 设置', click: () => createSettingsWindow() },
+                { type: 'separator' }, 
+                { label: '❌ 退出程序', click: () => { if (tray) tray.destroy(); app.quit(); } }
+            ]);
+            tray.setContextMenu(contextMenu);
+            tray.on('click', () => createSettingsWindow());
+        }
     } catch (e) {}
 }
 
@@ -122,35 +117,42 @@ ipcMain.on('save-dark-mode', (event, isDark) => {
     const config = loadConfig();
     config.darkMode = isDark;
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-    if(mainWindow) mainWindow.webContents.send('theme-changed', isDark);
-    if(settingsWindow) settingsWindow.webContents.send('theme-changed', isDark);
-    if(dashboardWindow) dashboardWindow.webContents.send('theme-changed', isDark);
+
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('theme-changed', isDark);
+    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.webContents.send('theme-changed', isDark);
+    if (dashboardWindow && !dashboardWindow.isDestroyed()) dashboardWindow.webContents.send('theme-changed', isDark);
 });
 
-// 核心联动：转发数据刷新信号
-ipcMain.on('data-updated', () => {
-    if (dashboardWindow) dashboardWindow.webContents.send('refresh-data');
-});
+ipcMain.on('data-updated', () => { if (dashboardWindow) dashboardWindow.webContents.send('refresh-data'); });
 
+// 窗口智能伸缩
 ipcMain.on('resize-main-window', (event, contentHeight) => {
     if (mainWindow) {
         const bounds = mainWindow.getBounds();
         const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
-        const workArea = display.workArea; 
-        mainWindow.setSize(320, contentHeight);
-        let newY = bounds.y;
-        // 智能避让任务栏
-        if (bounds.y + contentHeight > workArea.y + workArea.height) {
-            newY = workArea.y + workArea.height - contentHeight - 10; 
-            mainWindow.setPosition(bounds.x, newY);
+        const workArea = display.workArea;
+
+        const width = 340;
+        const newHeight = parseInt(contentHeight);
+
+        // 以当前位置为中心伸缩
+        const currentCenterY = bounds.y + (bounds.height / 2);
+        let newY = Math.round(currentCenterY - (newHeight / 2));
+
+        if (newY < workArea.y) newY = workArea.y + 10; 
+        if (newY + newHeight > workArea.y + workArea.height) {
+            newY = workArea.y + workArea.height - newHeight - 10; 
         }
+
+        mainWindow.setBounds({ x: bounds.x, y: newY, width, height: newHeight });
     }
 });
 
 function createDashboardWindow() {
-    if (dashboardWindow) { dashboardWindow.focus(); return; }
+    if (dashboardWindow && !dashboardWindow.isDestroyed()) { dashboardWindow.focus(); return; }
     dashboardWindow = new BrowserWindow({
-        width: 900, height: 600, title: "单词统计", autoHideMenuBar: true, icon: ICON_PATH,
+        width: 900, height: 600, title: "单词统计", autoHideMenuBar: true, 
+        icon: fs.existsSync(ICON_PATH) ? ICON_PATH : null,
         webPreferences: { nodeIntegration: true, contextIsolation: false }
     });
     dashboardWindow.loadFile('dashboard.html');
@@ -158,9 +160,14 @@ function createDashboardWindow() {
 }
 
 function createSettingsWindow() {
-    if (settingsWindow) { settingsWindow.focus(); return; }
+    if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.focus(); return; }
     settingsWindow = new BrowserWindow({
-        width: 400, height: 600, title: "设置", autoHideMenuBar: true, resizable: false, icon: ICON_PATH,
+        width: 400, 
+        height: 580, // 限制初始高度
+        title: "设置", 
+        autoHideMenuBar: true, 
+        resizable: false, 
+        icon: fs.existsSync(ICON_PATH) ? ICON_PATH : null,
         webPreferences: { nodeIntegration: true, contextIsolation: false }
     });
     settingsWindow.loadFile('settings.html');
@@ -172,18 +179,36 @@ ipcMain.on('resize-settings-window', (event, contentHeight) => {
 });
 
 function triggerCopy() {
-    const vbsPath = path.join(__dirname, 'copy.vbs');
-    execFile('cscript', ['//Nologo', vbsPath], (error) => {});
+    const psCommand = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^c');`;
+    const ps = spawn('powershell', ['-NoProfile', '-Command', psCommand]);
+    ps.on('error', () => {
+        const vbsPath = path.join(__dirname, 'copy.vbs');
+        execFile('cscript', ['//Nologo', vbsPath], () => {});
+    });
 }
 
-function updateAutoLaunch(shouldLaunch) {
-    app.setLoginItemSettings({ openAtLogin: shouldLaunch, openAsHidden: false, path: app.getPath('exe') });
+// 💎 核心补全：开机自启逻辑
+function updateAutoLaunch(isEnabled) {
+    // 只有打包后的 exe 才真正执行注册表操作，避免开发时每次都弹窗
+    if (!app.isPackaged) {
+        console.log('Dev Mode: Auto launch set to', isEnabled);
+        return;
+    }
+    
+    app.setLoginItemSettings({
+        openAtLogin: isEnabled,
+        openAsHidden: false, // 设为 false 确保托盘能出来
+        path: app.getPath('exe')
+    });
 }
 
 function applyConfig() {
     globalShortcut.unregisterAll();
     const config = loadConfig();
-    updateAutoLaunch(config.autoLaunch || false);
+    
+    // 💎 应用开机自启配置
+    updateAutoLaunch(config.autoLaunch);
+
     try {
         globalShortcut.register(config.shortcutTranslate, () => {
             clipboard.clear();
@@ -196,9 +221,7 @@ function applyConfig() {
                 if (attempts >= 20) clearInterval(checkTimer);
             }, 50);
         });
-    } catch (e) {}
-    try {
-        globalShortcut.register(config.shortcutOcr, () => { startScreenshot(); });
+        globalShortcut.register(config.shortcutOcr, () => startScreenshot());
     } catch (e) {}
 }
 
@@ -212,46 +235,109 @@ app.whenReady().then(async () => {
 ipcMain.on('settings-updated', () => { applyConfig(); if (mainWindow) mainWindow.webContents.send('config-updated'); });
 
 async function startScreenshot() {
-    const sources = await desktopCapturer.getSources({ types: ['screen'] });
+  try {
+    // 先拿当前鼠标所在显示器
     const cursorPoint = screen.getCursorScreenPoint();
     const currentDisplay = screen.getDisplayNearestPoint(cursorPoint);
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const allDisplays = screen.getAllDisplays();
-    let targetSource;
-    if (currentDisplay.id === primaryDisplay.id) {
-        targetSource = sources.find(s => s.id === 'screen:0:0') || sources[0];
-    } else {
-        const otherDisplays = allDisplays.filter(d => d.id !== primaryDisplay.id).sort((a, b) => a.bounds.x - b.bounds.x);
-        const primarySource = sources.find(s => s.id === 'screen:0:0') || sources[0];
-        const otherSources = sources.filter(s => s.id !== primarySource.id);
-        const index = otherDisplays.findIndex(d => d.id === currentDisplay.id);
-        targetSource = otherSources[index] || otherSources[0];
-    }
-    if (!targetSource) targetSource = sources[0];
 
+    // ✅ 按“像素分辨率”请求缩略图（其实就是截图），清晰度直接拉满
+    const thumbW = Math.floor(currentDisplay.bounds.width * currentDisplay.scaleFactor);
+    const thumbH = Math.floor(currentDisplay.bounds.height * currentDisplay.scaleFactor);
+
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: thumbW, height: thumbH },
+    });
+
+    // ✅ 显示器 id 在 Windows 上可能出现 signed/unsigned 差异：统一按 uint32 比较更稳
+    const curU32 = currentDisplay.id >>> 0;
+
+    let targetSource =
+      sources.find(s => {
+        const sid = Number(s.display_id);
+        return !Number.isNaN(sid) && ((sid >>> 0) === curU32);
+      }) ||
+      sources.find(s => s.display_id === String(curU32) || s.display_id === String(currentDisplay.id)) ||
+      sources[0];
+
+    // 先把截图 dataURL 准备好（用 thumbnail，而不是 getUserMedia）
+    const imageDataURL = targetSource.thumbnail.toDataURL();
+
+    // ✅ 创建窗口建议 show:false，等背景画好再 show（你现在已有 screenshot-ready 来 show）
     screenshotWindow = new BrowserWindow({
-        x: currentDisplay.bounds.x, y: currentDisplay.bounds.y,
-        width: currentDisplay.bounds.width, height: currentDisplay.bounds.height,
-        fullscreen: true, frame: false, transparent: true, alwaysOnTop: true, 
-        skipTaskbar: true, resizable: false, movable: false, enableLargerThanScreen: true,
-        webPreferences: { nodeIntegration: true, contextIsolation: false }
+      x: currentDisplay.bounds.x,
+      y: currentDisplay.bounds.y,
+      width: currentDisplay.bounds.width,
+      height: currentDisplay.bounds.height,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: false,
+      movable: false,
+      enableLargerThanScreen: true,
+      hasShadow: false,
+      show: false,
+      webPreferences: { nodeIntegration: true, contextIsolation: false }
     });
+    // 记录本次截图应该覆盖的区域（很关键：ready 时再贴一遍）
+    lastShotBounds = { ...currentDisplay.bounds };
+
+
+    screenshotWindow.setAlwaysOnTop(true, 'screen-saver');
+    screenshotWindow.moveTop();
+
+
+    screenshotWindow.setBounds(lastShotBounds, false);
+
+
     screenshotWindow.loadFile('screenshot.html');
+
     screenshotWindow.webContents.on('did-finish-load', () => {
-        screenshotWindow.webContents.send('SET_SOURCE', targetSource.id);
+      // ✅ 不再传 sourceId 字符串，而是把截图图传过去
+      screenshotWindow.webContents.send('SET_SOURCE', {
+        imageDataURL,
+        // 下面这些是可选：你要做更严谨的缩放/调试就用
+        display: {
+          id: currentDisplay.id,
+          bounds: currentDisplay.bounds,
+          scaleFactor: currentDisplay.scaleFactor
+        },
+        // 备用：如果你想保留旧方案可用
+        sourceId: targetSource.id
+      });
     });
+
+  } catch (e) {
+    console.error("启动截图失败:", e);
+    if (mainWindow) mainWindow.webContents.send('ocr-error', "截图错误: " + e.message);
+  }
 }
-ipcMain.on('screenshot-ready', () => { if (screenshotWindow) { screenshotWindow.show(); screenshotWindow.focus(); } });
+
+ipcMain.on('screenshot-ready', () => {
+  if (!screenshotWindow) return;
+
+  // ✅ ready 时再贴一次，解决“切主副屏/混合 DPI”导致的覆盖不全
+  if (lastShotBounds) screenshotWindow.setBounds(lastShotBounds, false);
+
+  // ✅ 再把层级顶到最高，压过主任务栏（修复双任务栏/露底）
+  screenshotWindow.setAlwaysOnTop(true, 'screen-saver');
+  screenshotWindow.moveTop();
+
+  screenshotWindow.show();
+  screenshotWindow.focus();
+});
+
 ipcMain.on('close-screenshot', () => { if (screenshotWindow) { screenshotWindow.close(); screenshotWindow = null; } });
 
 ipcMain.on('screenshot-captured', async (event, dataURL) => {
     if (screenshotWindow) { screenshotWindow.close(); screenshotWindow = null; }
-    showWindowAndSendEvent('ocr-loading');
+    showWindowAndTranslate("", true); 
+    mainWindow.webContents.send('ocr-loading');
+    
     if (!ocrWorker) await initOcrEngine();
-    if (!ocrWorker) {
-         mainWindow.webContents.send('ocr-error', "引擎启动失败");
-         return;
-    }
+    if (!ocrWorker) { mainWindow.webContents.send('ocr-error', "引擎启动失败"); return; }
+
     const base64Data = dataURL.replace(/^data:image\/\w+;base64,/, "");
     const imageBuffer = Buffer.from(base64Data, 'base64');
     try {
@@ -264,30 +350,28 @@ ipcMain.on('screenshot-captured', async (event, dataURL) => {
     }
 });
 
-function showWindowAndTranslate(text) {
+function showWindowAndTranslate(text, isOcr = false) {
     if (text.length > 3000) return;
-    showWindowAndSendEvent('start-translation', text);
-}
-function showWindowAndSendEvent(eventName, arg) {
-    const { x, y } = screen.getCursorScreenPoint();
-    const display = screen.getDisplayNearestPoint({ x, y });
-    const workArea = display.workArea; 
-    let currentH = mainWindow.getBounds().height || 200; 
-    let newX = x + 20; 
-    let newY = y + 20;
-    if (newX + 320 > workArea.x + workArea.width) newX = x - 320;
-    if (newY + currentH > workArea.y + workArea.height) newY = y - currentH;
-    mainWindow.setPosition(newX, newY);
+    
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const workArea = display.workArea;
+    const width = 340;
+    const height = 180; 
+
+    const x = Math.round(workArea.x + (workArea.width - width) / 2);
+    const y = Math.round(workArea.y + (workArea.height - height) / 2);
+
+    mainWindow.setBounds({ x, y, width, height });
     mainWindow.setAlwaysOnTop(true, 'screen-saver');
     mainWindow.show();
     mainWindow.focus(); 
-    mainWindow.webContents.send(eventName, arg);
+    
+    if(!isOcr && text) mainWindow.webContents.send('start-translation', text);
 }
+
 ipcMain.on('open-dashboard', () => { createDashboardWindow(); mainWindow.hide(); });
 ipcMain.on('open-settings', () => { createSettingsWindow(); mainWindow.hide(); });
 ipcMain.on('hide-window', () => mainWindow.hide());
-app.on('will-quit', () => {
-    globalShortcut.unregisterAll();
-    if (ocrWorker) ocrWorker.terminate(); 
-});
+app.on('will-quit', () => { globalShortcut.unregisterAll(); if (ocrWorker) ocrWorker.terminate(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
