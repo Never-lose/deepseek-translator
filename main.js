@@ -18,6 +18,7 @@ let mainWindow, dashboardWindow, screenshotWindow, settingsWindow;
 let isPinned = false; 
 let tray = null;
 let ocrWorker = null; 
+let lastShotBounds = null;
 
 // 单例锁
 const gotTheLock = app.requestSingleInstanceLock();
@@ -236,34 +237,161 @@ ipcMain.on('settings-updated', () => { applyConfig(); if (mainWindow) mainWindow
 
 async function startScreenshot() {
   try {
+    // 如果上一次截图窗口还没关，先关掉，避免叠层/焦点异常
+    if (screenshotWindow) {
+      try { screenshotWindow.close(); } catch (e) {}
+      screenshotWindow = null;
+    }
+
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
     // 先拿当前鼠标所在显示器
     const cursorPoint = screen.getCursorScreenPoint();
     const currentDisplay = screen.getDisplayNearestPoint(cursorPoint);
 
-    // ✅ 按“像素分辨率”请求缩略图（其实就是截图），清晰度直接拉满
-    const thumbW = Math.floor(currentDisplay.bounds.width * currentDisplay.scaleFactor);
-    const thumbH = Math.floor(currentDisplay.bounds.height * currentDisplay.scaleFactor);
+    // 当前显示器的“真实像素尺寸”
+    const displayPixelW = Math.floor(currentDisplay.bounds.width * currentDisplay.scaleFactor);
+    const displayPixelH = Math.floor(currentDisplay.bounds.height * currentDisplay.scaleFactor);
 
+    /**
+     * 关键修复点：
+     * 某些电脑上 desktopCapturer 返回的 display_id 和 screen 模块的 display.id 映射会互换，
+     * 导致“主屏拿到副屏画面、副屏拿到主屏画面”。
+     *
+     * 这里用一个短暂显示的“洋红色探针”在鼠标位置打点：
+     * - 抓一张小缩略图
+     * - 在每个 source 的缩略图中，去鼠标对应位置采样像素颜色
+     * - 哪个 source 在该点命中洋红色，就说明它才是真正的当前屏幕
+     */
+    let preferredSourceId = null;
+
+    if (screen.getAllDisplays().length > 1) {
+      const MARKER_SIZE = 22; // 探针方块大小（DIP，不是像素）
+      const markerHtml = `<!doctype html><html><body style="margin:0;background:#ff00ff;"></body></html>`;
+      let markerWin = null;
+
+      try {
+        markerWin = new BrowserWindow({
+          x: Math.round(cursorPoint.x - MARKER_SIZE / 2),
+          y: Math.round(cursorPoint.y - MARKER_SIZE / 2),
+          width: MARKER_SIZE,
+          height: MARKER_SIZE,
+          frame: false,
+          transparent: false,
+          backgroundColor: '#ff00ff',
+          alwaysOnTop: true,
+          skipTaskbar: true,
+          resizable: false,
+          movable: false,
+          focusable: false,
+          hasShadow: false,
+          show: false,
+          webPreferences: { nodeIntegration: false, contextIsolation: true }
+        });
+
+        // 不要挡鼠标事件（即使极端情况下探针没及时消失，也不影响操作）
+        markerWin.setIgnoreMouseEvents(true);
+        markerWin.setAlwaysOnTop(true, 'screen-saver');
+
+        await markerWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(markerHtml));
+
+        // showInactive 更不抢焦点；没有这个方法就用 show()
+        if (typeof markerWin.showInactive === 'function') markerWin.showInactive();
+        else markerWin.show();
+
+        // 等一小会儿，确保探针真的画到屏幕上了
+        await sleep(80);
+
+        // 抓一张“小缩略图”即可（用来探测，不用高清）
+        const probeSources = await desktopCapturer.getSources({
+          types: ['screen'],
+          thumbnailSize: { width: 420, height: 420 },
+        });
+
+        // 鼠标在当前显示器内的相对位置（先 DIP -> 再转像素）
+        const localDipX = cursorPoint.x - currentDisplay.bounds.x;
+        const localDipY = cursorPoint.y - currentDisplay.bounds.y;
+        const localPxX = Math.round(localDipX * currentDisplay.scaleFactor);
+        const localPxY = Math.round(localDipY * currentDisplay.scaleFactor);
+
+        // 判断是否“洋红色像素”：R/B 高、G 低（BGRA 或 RGBA 都能判）
+        const isMarkerPixel = (buf, idx) => {
+          const c0 = buf[idx];
+          const c1 = buf[idx + 1];
+          const c2 = buf[idx + 2];
+          return c1 < 80 && c0 > 220 && c2 > 220;
+        };
+
+        for (const s of probeSources) {
+          const thumb = s.thumbnail;
+          const { width: tw, height: th } = thumb.getSize();
+          if (!tw || !th) continue;
+
+          // 把“当前显示器的鼠标像素坐标”映射到这个缩略图坐标
+          let tx = Math.round((localPxX / displayPixelW) * tw);
+          let ty = Math.round((localPxY / displayPixelH) * th);
+          tx = Math.max(0, Math.min(tw - 1, tx));
+          ty = Math.max(0, Math.min(th - 1, ty));
+
+          const buf = thumb.toBitmap();
+
+          // 采样 3x3，避免缩放插值导致“中心点刚好没命中”
+          let hits = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const x = Math.max(0, Math.min(tw - 1, tx + dx));
+              const y = Math.max(0, Math.min(th - 1, ty + dy));
+              const idx = (y * tw + x) * 4;
+              if (isMarkerPixel(buf, idx)) hits++;
+            }
+          }
+
+          if (hits >= 3) {
+            preferredSourceId = s.id; // ✅ 找到了真正对应当前屏幕的 source
+            break;
+          }
+        }
+      } catch (e) {
+        // 探针探测失败就忽略，走后备逻辑
+      } finally {
+        // 关掉探针，避免出现在最终截图里
+        if (markerWin && !markerWin.isDestroyed()) {
+          try { markerWin.hide(); } catch (e) {}
+          try { markerWin.close(); } catch (e) {}
+        }
+        await sleep(80);
+      }
+    }
+
+    // 现在抓最终“高清图”（仍然只需要当前屏幕像素大小）
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
-      thumbnailSize: { width: thumbW, height: thumbH },
+      thumbnailSize: { width: displayPixelW, height: displayPixelH },
     });
 
-    // ✅ 显示器 id 在 Windows 上可能出现 signed/unsigned 差异：统一按 uint32 比较更稳
-    const curU32 = currentDisplay.id >>> 0;
+    let targetSource = null;
 
-    let targetSource =
-      sources.find(s => {
-        const sid = Number(s.display_id);
-        return !Number.isNaN(sid) && ((sid >>> 0) === curU32);
-      }) ||
-      sources.find(s => s.display_id === String(curU32) || s.display_id === String(currentDisplay.id)) ||
-      sources[0];
+    // ✅ 优先用探针锁定到的 source.id（最可靠，解决你说的互换问题）
+    if (preferredSourceId) {
+      targetSource = sources.find(s => s.id === preferredSourceId) || null;
+    }
 
-    // 先把截图 dataURL 准备好（用 thumbnail，而不是 getUserMedia）
+    // 后备：保留你原来的 display_id 匹配（探针失败时才用）
+    if (!targetSource) {
+      const curU32 = currentDisplay.id >>> 0;
+      targetSource =
+        sources.find(s => {
+          const sid = Number(s.display_id);
+          return !Number.isNaN(sid) && ((sid >>> 0) === curU32);
+        }) ||
+        sources.find(s => s.display_id === String(curU32) || s.display_id === String(currentDisplay.id)) ||
+        sources[0];
+    }
+
+    // 把截图 dataURL 准备好（用 thumbnail，而不是 getUserMedia）
     const imageDataURL = targetSource.thumbnail.toDataURL();
 
-    // ✅ 创建窗口建议 show:false，等背景画好再 show（你现在已有 screenshot-ready 来 show）
+    // 创建截图窗口（覆盖当前显示器）
     screenshotWindow = new BrowserWindow({
       x: currentDisplay.bounds.x,
       y: currentDisplay.bounds.y,
@@ -280,30 +408,24 @@ async function startScreenshot() {
       show: false,
       webPreferences: { nodeIntegration: true, contextIsolation: false }
     });
-    // 记录本次截图应该覆盖的区域（很关键：ready 时再贴一遍）
-    lastShotBounds = { ...currentDisplay.bounds };
 
+    // 记录本次截图应该覆盖的区域（ready 时再贴一遍）
+    lastShotBounds = { ...currentDisplay.bounds };
 
     screenshotWindow.setAlwaysOnTop(true, 'screen-saver');
     screenshotWindow.moveTop();
-
-
     screenshotWindow.setBounds(lastShotBounds, false);
-
 
     screenshotWindow.loadFile('screenshot.html');
 
-    screenshotWindow.webContents.on('did-finish-load', () => {
-      // ✅ 不再传 sourceId 字符串，而是把截图图传过去
+    screenshotWindow.webContents.once('did-finish-load', () => {
       screenshotWindow.webContents.send('SET_SOURCE', {
         imageDataURL,
-        // 下面这些是可选：你要做更严谨的缩放/调试就用
         display: {
           id: currentDisplay.id,
           bounds: currentDisplay.bounds,
           scaleFactor: currentDisplay.scaleFactor
         },
-        // 备用：如果你想保留旧方案可用
         sourceId: targetSource.id
       });
     });
@@ -313,6 +435,7 @@ async function startScreenshot() {
     if (mainWindow) mainWindow.webContents.send('ocr-error', "截图错误: " + e.message);
   }
 }
+
 
 ipcMain.on('screenshot-ready', () => {
   if (!screenshotWindow) return;
