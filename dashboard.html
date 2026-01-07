@@ -58,6 +58,97 @@
         body.dark-mode .btn-export { background: #004d40; color: #b2dfdb; border-color: #00695c; }
         body.dark-mode .btn-import { background: #1b5e20; color: #c8e6c9; border-color: #2e7d32; }
         body.dark-mode .coding-col { color: #ce93d8; }
+        /* 编程含义单元格容器 */
+        .coding-container {
+            position: relative;
+            cursor: help;
+        }
+
+        /* 隐藏超出部分，显示省略号 */
+        .coding-text-truncate {
+            display: inline-block;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        /* 通用 Tooltip 容器 */
+            .tooltip-container {
+                position: relative;
+                cursor: help;
+            }
+
+            /* 文本截断显示 */
+            .text-truncate {
+                display: inline-block;
+                max-width: 100%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                vertical-align: middle;
+            }
+
+            /* 炫酷通用浮层 */
+        .custom-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            left: 0;
+            bottom: 125%; 
+            width: 280px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            color: #333;
+            font-size: 13px;
+            line-height: 1.6;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            z-index: 999;
+            transform: translateY(10px);
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            word-break: break-all;
+            white-space: normal;
+        }
+
+        .custom-tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 20px;
+            border-width: 8px;
+            border-style: solid;
+            border-color: rgba(255, 255, 255, 0.95) transparent transparent transparent;
+        }
+
+        .tooltip-container:hover .custom-tooltip {
+            visibility: visible;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* 深色模式适配 */
+        body.dark-mode .custom-tooltip {
+            background: rgba(40, 40, 42, 0.95);
+            color: #eee;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        body.dark-mode .custom-tooltip::after {
+            border-color: rgba(40, 40, 42, 0.95) transparent transparent transparent;
+        }
+        .dashboard-wrapper {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+/* 调整表格行高，让全屏下不显得拥挤 */
+tr {
+    height: 60px; /* 增加行高 */
+}
     </style>
 </head>
 <body>
@@ -95,142 +186,191 @@
         <tbody></tbody>
     </table>
     <input type="file" id="file-input" style="display: none;" accept=".json">
-    <script>
-        const { ipcRenderer } = require('electron');
-        const fs = require('fs');
-        const path = require('path');
-        const os = require('os');
+   <script>
+    const { ipcRenderer } = require('electron');
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
 
-        const USER_DATA_PATH = ipcRenderer.sendSync('get-user-data-path');
-        const CONFIG_PATH = path.join(USER_DATA_PATH, 'config.json');
-        const DB_PATH = path.join(USER_DATA_PATH, 'words.json');
+    const USER_DATA_PATH = ipcRenderer.sendSync('get-user-data-path');
+    const CONFIG_PATH = path.join(USER_DATA_PATH, 'config.json');
+    const DB_PATH = path.join(USER_DATA_PATH, 'words.json');
 
-        // 🆕 核心：监听实时刷新信号
-        ipcRenderer.on('refresh-data', () => {
-            loadData();
-        });
+    // 1. 先定义加载函数
+    function loadConfig() { 
+        try { return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')); } 
+        catch(e) { return {}; } 
+    }
 
-        let currentSort = 'time'; 
-        let isMasked = false;     
-        let allWords = [];        
+    // 2. 初始化配置和状态
+    const config = loadConfig();
+    let currentSort = config.dashboardSort || 'time'; // 读取持久化的排序偏好
+    let isMasked = false;     
+    let allWords = [];    
 
-        function loadConfig() { try { return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')); } catch(e) { return {}; } }
-        const config = loadConfig();
-        if (config.darkMode) document.body.classList.add('dark-mode');
-        ipcRenderer.on('theme-changed', (e, dark) => {
-            if (dark) document.body.classList.add('dark-mode');
-            else document.body.classList.remove('dark-mode');
-        });
+    // 应用主题
+    if (config.darkMode) document.body.classList.add('dark-mode');
+    ipcRenderer.on('theme-changed', (e, dark) => {
+        if (dark) document.body.classList.add('dark-mode');
+        else document.body.classList.remove('dark-mode');
+    });
 
-        window.speakWord = function(text) {
-            window.speechSynthesis.cancel();
-            const msg = new SpeechSynthesisUtterance(text);
-            msg.lang = 'en-US'; 
-            window.speechSynthesis.speak(msg);
+    // 监听实时刷新信号
+    ipcRenderer.on('refresh-data', () => { loadData(); });
+
+    window.speakWord = function(text) {
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.lang = 'en-US'; 
+        window.speechSynthesis.speak(msg);
+    }
+
+    window.deleteWord = function(wordToDelete) {
+        if (!confirm(`确定要删除单词 "${wordToDelete}" 吗？\n删除后不可恢复。`)) return;
+        try {
+            const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+            if (db[wordToDelete]) {
+                delete db[wordToDelete];
+                fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+                loadData(); 
+            }
+        } catch (e) { alert("删除失败: " + e.message); }
+    }
+
+    function loadData() {
+        if (!fs.existsSync(DB_PATH)) return;
+        try {
+            const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+            allWords = Object.keys(db).map(k => ({ word: k, ...db[k] }));
+            document.getElementById('total-words').innerText = allWords.length;
+            const today = new Date().setHours(0,0,0,0);
+            const todayCount = allWords.filter(w => w.lastTime > today).length;
+            document.getElementById('today-words').innerText = todayCount;
+            if (allWords.length > 0) {
+                const top = [...allWords].sort((a,b) => b.count - a.count)[0];
+                document.getElementById('top-word').innerText = top.word;
+            } else { document.getElementById('top-word').innerText = "-"; }
+            renderTable();
+        } catch(e) {}
+    }
+
+    function renderTable() {
+    let displayWords = [...allWords];
+    // 根据持久化的 currentSort 排序
+    if (currentSort === 'time') { 
+        displayWords.sort((a, b) => b.lastTime - a.lastTime); 
+    } else { 
+        displayWords.sort((a, b) => b.count - a.count); 
+    }
+    
+    const tbody = document.querySelector('#words-table tbody');
+    
+    // 🆕 智能处理函数：自动生成截断内容 + 炫酷浮层
+    const createSmartCell = (content, maxLength = 30) => {
+        if (!content || content === "无" || content === "-") return `-`;
+        const cleanContent = content.replace(/<br>/g, '; ');
+        const isLong = cleanContent.length > maxLength;
+        const shortText = isLong ? cleanContent.substring(0, maxLength) + '...' : cleanContent;
+        
+        if (isLong) {
+            return `
+                <div class="tooltip-container">
+                    <span class="text-truncate">${shortText}</span>
+                    <div class="custom-tooltip">${content}</div>
+                </div>`;
         }
+        return `<span>${shortText}</span>`;
+    };
 
-        window.deleteWord = function(wordToDelete) {
-            if (!confirm(`确定要删除单词 "${wordToDelete}" 吗？\n删除后不可恢复。`)) return;
+    tbody.innerHTML = displayWords.map(w => {
+        const maskClass = isMasked ? 'masked-text' : '';
+        const generalHtml = createSmartCell(w.general); // 通用释义也变帅
+        const codingHtml = createSmartCell(w.coding);   // 编程含义也变帅
+        const codingClass = (w.coding && w.coding !== "无") ? 'coding-col' : 'no-coding';
+
+        return `
+        <tr>
+            <td style="font-weight:bold;color:#2196F3">${w.word}<span class="speak-btn-table" onclick="speakWord('${w.word}')">🔊</span></td>
+            <td class="phonetic-col">${w.phonetic || ''}</td>
+            <td class="${maskClass}" onclick="this.classList.add('revealed')">${generalHtml}</td>
+            <td class="${codingClass} ${maskClass}" onclick="this.classList.add('revealed')">${codingHtml}</td>
+            <td>${w.count}</td>
+            <td style="font-size:12px;color:#999">${new Date(w.lastTime).toLocaleString()}</td>
+            <td style="text-align:center;"><button class="btn-delete" onclick="deleteWord('${w.word}')" title="删除">🗑️</button></td>
+        </tr>`}).join('');
+}
+
+    // 核心切换函数
+    window.changeSort = function(type) {
+        currentSort = type;
+        
+        // 1. 同步 UI 样式
+        syncSortButtons();
+        
+        // 2. 重新渲染
+        renderTable();
+
+        // 3. 写入硬盘持久化
+        try {
+            const latestConfig = loadConfig();
+            latestConfig.dashboardSort = type;
+            fs.writeFileSync(CONFIG_PATH, JSON.stringify(latestConfig, null, 2));
+        } catch (e) { console.error("保存排序偏好失败:", e); }
+    }
+
+    // 提取出来的同步按钮状态函数
+    function syncSortButtons() {
+        document.getElementById('sort-time').classList.toggle('active', currentSort === 'time');
+        document.getElementById('sort-count').classList.toggle('active', currentSort === 'count');
+    }
+
+    window.toggleMask = function() {
+        isMasked = !isMasked;
+        const btn = document.getElementById('btn-toggle-mask');
+        btn.classList.toggle('active', isMasked);
+        btn.innerText = isMasked ? '🐵 已开启遮挡' : '👁️ 遮挡释义 (背单词)';
+        renderTable();
+    }
+
+    // --- 初始化执行 ---
+    syncSortButtons(); // 🆕 关键：进入页面立刻根据配置同步按钮高亮
+    loadData();      // 渲染数据
+
+    // 导出备份
+    document.getElementById('btn-export').addEventListener('click', () => {
+        if (!fs.existsSync(DB_PATH)) { alert('⚠️ 无数据'); return; }
+        const data = fs.readFileSync(DB_PATH, 'utf-8');
+        const desktopPath = path.join(os.homedir(), 'Desktop', `deepseek_words_backup.json`);
+        try { fs.writeFileSync(desktopPath, data); alert(`✅ 已导出到桌面`); } catch (e) { alert('❌ 导出失败: ' + e.message); }
+    });
+
+    // 导入备份
+    const fileInput = document.getElementById('file-input');
+    document.getElementById('btn-import').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
             try {
-                const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-                if (db[wordToDelete]) {
-                    delete db[wordToDelete];
-                    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
-                    loadData(); 
+                const newData = JSON.parse(event.target.result);
+                let currentData = {};
+                if (fs.existsSync(DB_PATH)) currentData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+                let count = 0;
+                for (const word in newData) {
+                    if (currentData[word]) {
+                        currentData[word].count = Math.max(currentData[word].count, newData[word].count);
+                        currentData[word].lastTime = Math.max(currentData[word].lastTime, newData[word].lastTime);
+                    } else { currentData[word] = newData[word]; count++; }
                 }
-            } catch (e) { alert("删除失败: " + e.message); }
-        }
-
-        function loadData() {
-            if (!fs.existsSync(DB_PATH)) return;
-            try {
-                const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-                allWords = Object.keys(db).map(k => ({ word: k, ...db[k] }));
-                document.getElementById('total-words').innerText = allWords.length;
-                const today = new Date().setHours(0,0,0,0);
-                const todayCount = allWords.filter(w => w.lastTime > today).length;
-                document.getElementById('today-words').innerText = todayCount;
-                if (allWords.length > 0) {
-                    const top = [...allWords].sort((a,b) => b.count - a.count)[0];
-                    document.getElementById('top-word').innerText = top.word;
-                } else { document.getElementById('top-word').innerText = "-"; }
-                renderTable();
-            } catch(e) {}
-        }
-
-        function renderTable() {
-            let displayWords = [...allWords];
-            if (currentSort === 'time') { displayWords.sort((a, b) => b.lastTime - a.lastTime); } 
-            else { displayWords.sort((a, b) => b.count - a.count); }
-            const tbody = document.querySelector('#words-table tbody');
-            tbody.innerHTML = displayWords.map(w => {
-                const maskClass = isMasked ? 'masked-text' : '';
-                const general = w.general ? w.general.replace(/<br>/g, '; ').substring(0, 30) + (w.general.length > 30 ? '...' : '') : '';
-                let coding = w.coding && w.coding !== "无" ? w.coding : '-';
-                let codingClass = w.coding && w.coding !== "无" ? 'coding-col' : 'no-coding';
-                if (coding.length > 30) coding = coding.substring(0, 30) + '...';
-                return `
-                <tr>
-                    <td style="font-weight:bold;color:#2196F3">${w.word}<span class="speak-btn-table" onclick="speakWord('${w.word}')">🔊</span></td>
-                    <td class="phonetic-col">${w.phonetic || ''}</td>
-                    <td class="${maskClass}" onclick="this.classList.add('revealed')" title="点击显示">${general}</td>
-                    <td class="${codingClass} ${maskClass}" onclick="this.classList.add('revealed')" title="点击显示">${coding}</td>
-                    <td>${w.count}</td>
-                    <td style="font-size:12px;color:#999">${new Date(w.lastTime).toLocaleString()}</td>
-                    <td style="text-align:center;"><button class="btn-delete" onclick="deleteWord('${w.word}')" title="删除">🗑️</button></td>
-                </tr>`}).join('');
-        }
-
-        window.changeSort = function(type) {
-            currentSort = type;
-            document.getElementById('sort-time').classList.toggle('active', type === 'time');
-            document.getElementById('sort-count').classList.toggle('active', type === 'count');
-            renderTable();
-        }
-
-        window.toggleMask = function() {
-            isMasked = !isMasked;
-            const btn = document.getElementById('btn-toggle-mask');
-            btn.classList.toggle('active', isMasked);
-            btn.innerText = isMasked ? '🐵 已开启遮挡' : '👁️ 遮挡释义 (背单词)';
-            renderTable();
-        }
-
-        loadData();
-
-        document.getElementById('btn-export').addEventListener('click', () => {
-            if (!fs.existsSync(DB_PATH)) { alert('⚠️ 无数据'); return; }
-            const data = fs.readFileSync(DB_PATH, 'utf-8');
-            const desktopPath = path.join(os.homedir(), 'Desktop', `deepseek_words_backup.json`);
-            try { fs.writeFileSync(desktopPath, data); alert(`✅ 已导出到桌面`); } catch (e) { alert('❌ 导出失败: ' + e.message); }
-        });
-
-        const fileInput = document.getElementById('file-input');
-        document.getElementById('btn-import').addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                try {
-                    const newData = JSON.parse(event.target.result);
-                    let currentData = {};
-                    if (fs.existsSync(DB_PATH)) currentData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-                    let count = 0;
-                    for (const word in newData) {
-                        if (currentData[word]) {
-                            currentData[word].count = Math.max(currentData[word].count, newData[word].count);
-                            currentData[word].lastTime = Math.max(currentData[word].lastTime, newData[word].lastTime);
-                        } else { currentData[word] = newData[word]; count++; }
-                    }
-                    fs.writeFileSync(DB_PATH, JSON.stringify(currentData, null, 2));
-                    alert(`✅ 成功导入 ${count} 个新单词`);
-                    loadData(); 
-                } catch (err) { alert('❌ 格式错误'); }
-            };
-            reader.readAsText(file);
-            fileInput.value = '';
-        });
-    </script>
+                fs.writeFileSync(DB_PATH, JSON.stringify(currentData, null, 2));
+                alert(`✅ 成功导入 ${count} 个新单词`);
+                loadData(); 
+            } catch (err) { alert('❌ 格式错误'); }
+        };
+        reader.readAsText(file);
+        fileInput.value = '';
+    });
+</script>
 </body>
 </html>

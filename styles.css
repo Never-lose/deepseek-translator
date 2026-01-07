@@ -132,6 +132,40 @@ body.dark-mode .ds-footer { background: #1e1e1e; border-top-color: #333; }
     font-size: 13px; color: #24292e; border-left: 4px solid #9c27b0; margin-top: 4px;
 }
 
+
+
+/* Markdown 内容基础样式 */
+.markdown-body {
+    line-height: 1.6;
+    word-wrap: break-word;
+}
+
+.markdown-body p {
+    margin-bottom: 10px;
+}
+
+.markdown-body ul, .markdown-body ol {
+    padding-left: 20px;
+    margin-bottom: 10px;
+}
+
+.markdown-body li {
+    margin-bottom: 4px;
+}
+
+.markdown-body strong {
+    color: #2196F3; /* 让加粗部分颜色更醒目 */
+}
+
+body.dark-mode .markdown-body strong {
+    color: #4fc3f7;
+}
+
+/* 针对你图片中的代码解析块进行优化 */
+.ds-text.markdown-body {
+    font-size: 14px;
+}
+
 /* 暗黑模式 */
 body.dark-mode .ds-word-title { color: #fff; }
 body.dark-mode .ds-word-title-small { color: #aaa; }
@@ -150,5 +184,14 @@ body.dark-mode .ds-coding-block { background-color: #2d2d2d; color: #ccc; border
     -webkit-app-region: no-drag; 
 }
 .icon-btn:hover { opacity: 1; transform: scale(1.15); }
-.icon-btn.pinned { color: #2196F3; opacity: 1; transform: rotate(45deg); }
+.icon-btn.pinned { 
+    color: #ff5252 !important; /* 变成鲜红色，代表“固定” */
+    opacity: 1; 
+    transform: rotate(45deg) scale(1.2); /* 旋转并稍微放大 */
+}
+
+/* 悬停时的过渡效果 */
+.icon-btn {
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
 .icon-close:hover { color: #ff5252; }

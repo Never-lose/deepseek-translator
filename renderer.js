@@ -1,15 +1,13 @@
 const { ipcRenderer } = require('electron');
 const fs = require('fs');
 const path = require('path');
-
+function hasChinese(text) {
+    return /[\u4e00-\u9fa5]/.test(text);
+}
 const USER_DATA_PATH = ipcRenderer.sendSync('get-user-data-path');
 const CONFIG_PATH = path.join(USER_DATA_PATH, 'config.json');
 const DB_PATH = path.join(USER_DATA_PATH, 'words.json');
 const container = document.getElementById('app-container');
-
-let isPinned = false; 
-let isDarkMode = false;
-
 function getConfig() {
     try {
         if (fs.existsSync(CONFIG_PATH)) {
@@ -27,9 +25,14 @@ function getConfig() {
     } catch (e) {}
     return { engine: "google", apiKey: "" };
 }
+const initConfig = getConfig();
+let isPinned = true; // 默认设为 true，实现每次打开默认置顶
+let isDarkMode = initConfig.darkMode || false;
+
+
 
 // ... (Theme, DB, Speak, EventListeners 保持不变) ...
-const initConfig = getConfig();
+
 isDarkMode = initConfig.darkMode || false;
 applyTheme(isDarkMode);
 
@@ -43,57 +46,114 @@ document.addEventListener('keydown', (event) => { if (event.key === 'Escape') ip
 ipcRenderer.on('ocr-loading', () => { renderPopup("🔍", `<div style="text-align:center;padding:40px;color:#999;font-size:14px;">正在提取文字...</div>`, "", false); });
 ipcRenderer.on('ocr-error', (event, msg) => { renderPopup("Error", `<div style="color:#ff5252;padding:10px;text-align:center;">${msg}</div>`, "", false); });
 
-// 🚀 核心翻译逻辑更新
+
+
 ipcRenderer.on('start-translation', async (event, text) => {
+    isPinned = true;
     const config = getConfig();
     const engine = config.engine || 'google';
 
+    // 1. 文本预处理：去除多余换行和空格
     let processedText = text.replace(/([^\n])\n([^\n])/g, '$1 $2').replace(/\s+/g, ' ').trim();
+    const isTargetEn = hasChinese(processedText);
+    const targetLangCode = isTargetEn ? 'en' : 'zh-CN';
+    const targetLangName = isTargetEn ? '英文' : '中文';
+
+    // 判断是单词还是句子
     const wordCount = processedText.split(' ').length;
     const isSentence = wordCount > 3 || processedText.length > 30;
 
+    // 检查 Key 是否配置
     if ((engine === 'deepseek' && !config.apiKey) || (engine === 'xiaomi' && !config.mimoKey)) {
         renderPopup("Key Missing", `<div style="padding:20px;text-align:center;">请先在设置中配置 API Key</div>`, "", false);
         return;
     }
 
+    // --- 核心模式判断逻辑 ---
+    // 获取当前引擎对应的模式字符串 ("always" 或 "smart")
+    const mode = engine === 'xiaomi' ? (config.mimoCodeModeType || 'always') : (config.codeModeType || 'always');
+    // 获取当前引擎对应的解释开关
+    const enableExplain = engine === 'xiaomi' ? config.mimoEnableCodeExplain : config.enableCodeExplain;
+
     let engineName = engine === 'xiaomi' ? 'Xiaomi' : (engine === 'deepseek' ? 'DeepSeek' : 'Google');
+    
+    // 初始化弹窗显示加载中
     renderPopup(isSentence ? "Translating..." : "Searching...", 
         `<div style="color:#999;font-size:13px;padding:30px 0;text-align:center;">正在使用 ${engineName} 思考...</div>`, "", isSentence);
-    
-    // 🧠 智能判断：根据不同引擎读取不同的配置
-    let enableCodeMode = true;
-    let enableCodeExplain = true;
 
-    if (engine === 'deepseek') {
-        enableCodeMode = config.enableCodeMode;
-        enableCodeExplain = config.enableCodeExplain;
-    } else if (engine === 'xiaomi') {
-        enableCodeMode = config.mimoEnableCodeMode;
-        enableCodeExplain = config.mimoEnableCodeExplain;
-    }
-
-    // 判断是否启用代码解释模式 (非Google引擎 + 开启了编程模式 + 开启了解释 + 是句子)
-    const isCodeExplainMode = (engine !== 'google' && enableCodeMode && enableCodeExplain);
-
+    // --- 分支处理：长句/段落翻译 ---
     if (isSentence) {
-        let result = "";
-        if (engine === 'google') result = await callGoogleTranslate(processedText);
-        else if (engine === 'xiaomi') result = await callXiaomiMimo(processedText, config, isCodeExplainMode);
-        else result = await translateSentence(processedText, config.apiKey, isCodeExplainMode);
-        
-        renderSentenceResult(processedText, result, isCodeExplainMode);
-    } else {
-        const cleanRegex = /^[^\w\u4e00-\u9fa5#+]+|[^\w\u4e00-\u9fa5#+]+$/g;
-        let cleanText = processedText.replace(cleanRegex, '');
-        if (!cleanText) cleanText = processedText;
-        
+        renderSentenceResult(processedText, "正在思考...", true);
+
+        if (engine === 'google') {
+            const result = await callGoogleTranslate(processedText, targetLangCode);
+            renderSentenceResult(processedText, result, false);
+        } else {
+            // 🚀 准备流式请求参数
+            const url = engine === 'xiaomi' ? `${config.mimoUrl.replace(/\/$/, "")}/chat/completions` : "https://api.deepseek.com/chat/completions";
+            const key = engine === 'xiaomi' ? config.mimoKey : config.apiKey;
+            const model = engine === 'xiaomi' ? config.mimoModel : "deepseek-chat";
+            
+            let prompt = "";
+            if (mode === 'always') {
+                prompt = enableExplain 
+                    ? `[指令] 你是技术专家。请翻译并详细解释逻辑。回复必须以 [TECH] 开头。\n[内容] ${processedText}`
+                    : `[指令] 你是程序员。请按编程语境翻译。回复必须以 [TECH] 开头。\n[内容] ${processedText}`;
+            } else {
+                // 🧠 核心改进：引入强制标签控制
+                prompt = `你是翻译专家。请根据内容性质选择回复格式：
+1. 如果内容涉及代码、API或编程术语：回复必须以 [TECH] 开头，先翻译再提供简要技术分析。
+2. 如果内容是日常对话或非技术描述：回复必须以 [GENERAL] 开头，仅输出翻译结果，禁止任何额外解释。
+内容：${processedText}`;
+            }
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+                    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], stream: true })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullText = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.trim().startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+                            try {
+                                const json = JSON.parse(line.trim().slice(6));
+                                const content = json.choices[0].delta.content || "";
+                                if (content) {
+                                    fullText += content;
+                                    // 实时更新 Markdown 渲染
+                                    renderSentenceResult(processedText, fullText, mode === 'always');
+                                }
+                            } catch (e) { }
+                        }
+                    }
+                }
+            } catch (err) {
+                renderSentenceResult(processedText, "❌ 翻译出错: " + err.message, false);
+            }
+        }
+    } 
+    // --- 分支处理：单词/短语查询 ---
+    else {
+        const cleanText = processedText.replace(/^[^\w\u4e00-\u9fa5#+]+|[^\w\u4e00-\u9fa5#+]+$/g, '') || processedText;
         const lowerWord = cleanText.toLowerCase();
         const db = readDb();
-        let history = db[lowerWord];
         
+        // 1. 检查本地数据库缓存
+        let history = db[lowerWord];
         if (history && history.general) {
-            history.count++; history.lastTime = Date.now();
+            history.count++; 
+            history.lastTime = Date.now();
             db[lowerWord] = history; 
             saveDb(db);
             ipcRenderer.send('data-updated');
@@ -101,20 +161,24 @@ ipcRenderer.on('start-translation', async (event, text) => {
             return;
         }
 
+        // 2. 缓存未命中，调用接口
         let parsedData = {};
         if (engine === 'google') {
-            const googleRaw = await callGoogleTranslate(cleanText);
+            const googleRaw = await callGoogleTranslate(cleanText, targetLangCode);
             parsedData = parseGoogleResult(googleRaw, cleanText);
         } else if (engine === 'xiaomi') {
-            const raw = await callXiaomiMimoWord(cleanText, config, enableCodeMode); // 传参控制
+            // 修正：这里传入 mode 字符串 ("always"/"smart")
+            const raw = await callXiaomiMimoWord(cleanText, config, mode, targetLangName);
             if (raw.startsWith('❌')) { renderPopup(cleanText, `<div style="color:#ff5252">${raw}</div>`, "", false); return; }
             parsedData = parseDeepSeekResult(raw); 
         } else {
-            const dsRaw = await translateWord(cleanText, config.apiKey, enableCodeMode); // 传参控制
+            // 修正：这里传入 mode 字符串 ("always"/"smart")
+            const dsRaw = await translateWord(cleanText, config.apiKey, mode, targetLangName);
             if (dsRaw.startsWith('❌')) { renderPopup(cleanText, `<div style="color:#ff5252">${dsRaw}</div>`, "", false); return; }
             parsedData = parseDeepSeekResult(dsRaw);
         }
 
+        // 3. 保存到本地数据库并渲染
         const { general, coding, phonetic } = parsedData;
         db[lowerWord] = { count: 1, lastTime: Date.now(), general, coding, phonetic };
         saveDb(db);
@@ -123,12 +187,7 @@ ipcRenderer.on('start-translation', async (event, text) => {
     }
 });
 
-async function translateWord(text, key, enableCodeMode) {
-    let prompt = enableCodeMode 
-        ? `解释单词 "${text}"。严格按格式输出：\n[音标]\n::通用:: [中文含义]\n::编程:: [编程含义]`
-        : `解释单词 "${text}"。严格按格式输出：\n[音标]\n::通用:: [中文含义]`;
-    return await callDeepSeek(prompt, key);
-}
+
 async function translateSentence(text, key, isCodeExplainMode) {
     let prompt = isCodeExplainMode 
         ? `分析以下内容。如果是代码，解释逻辑；如果是自然语言，直接翻译成中文。\n内容：${text}`
@@ -147,18 +206,69 @@ async function callDeepSeek(prompt, key) {
     } catch (e) { return `❌ 网络错误: ${e.message}`; }
 }
 
-async function callXiaomiMimo(text, config, isCodeExplainMode) {
-    let prompt = isCodeExplainMode 
-        ? `分析以下内容。如果是代码，解释逻辑；如果是自然语言，直接翻译成中文。\n内容：${text}`
-        : `将以下内容直接翻译成中文：\n${text}`;
-    return await callXiaomiApi(prompt, config);
+async function callDeepSeekStream(prompt, key, onChunk) {
+    try {
+        const resp = await fetch("https://api.deepseek.com/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+            body: JSON.stringify({ 
+                model: "deepseek-chat", 
+                messages: [{ role: "user", content: prompt }], 
+                stream: true // 🚀 核心：开启流式
+            })
+        });
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.trim().startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+                    try {
+                        const data = JSON.parse(line.trim().slice(6));
+                        const content = data.choices[0].delta.content || "";
+                        fullText += content;
+                        // 🚀 实时回调更新 UI
+                        onChunk(fullText); 
+                    } catch (e) { continue; }
+                }
+            }
+        }
+        return fullText;
+    } catch (e) { return `❌ 错误: ${e.message}`; }
 }
 
-// 适配了 codeMode 的参数
-async function callXiaomiMimoWord(text, config, enableCodeMode) {
-    let prompt = enableCodeMode
-        ? `请解释单词 "${text}"。严格遵循格式输出：\n[音标]\n::通用:: [中文含义]\n::编程:: [编程含义]`
-        : `请解释单词 "${text}"。严格遵循格式输出：\n[音标]\n::通用:: [中文含义]`;
+// DeepSeek 单词查询
+async function translateWord(text, key, mode, targetLangName = "中文") {
+    let prompt = "";
+    if (mode === 'always') {
+        prompt = `解释单词 "${text}"。必须包含编程含义。严格按格式输出：\n[音标]\n::通用:: [含义]\n::编程:: [编程含义]`;
+    } else {
+        // 智能识别模式：让 AI 判断是否有编程含义
+        prompt = `解释单词 "${text}"。如果该单词在编程中有特定用途，请在 ::编程:: 块中说明，否则 ::编程:: 块请填“无”。
+格式：
+[音标]
+::通用:: [${targetLangName}含义]
+::编程:: [编程含义]`;
+    }
+    return await callDeepSeek(prompt, key);
+}
+
+// Xiaomi 单词查询 (统一为一个函数)
+async function callXiaomiMimoWord(text, config, mode, targetLangName = "中文") {
+    let prompt = "";
+    if (mode === 'always') {
+        prompt = `解释单词 "${text}"。必须包含编程含义。严格遵循格式：\n[音标]\n::通用:: [${targetLangName}含义]\n::编程:: [编程含义]`;
+    } else {
+        prompt = `智能解释单词 "${text}"。判断其是否具有编程语境下的含义。格式：\n[音标]\n::通用:: [${targetLangName}含义]\n::编程:: [编程含义或填“无”]`;
+    }
     return await callXiaomiApi(prompt, config);
 }
 
@@ -189,12 +299,11 @@ function parseDeepSeekResult(raw) {
     return { general: gen, coding: cod, phonetic };
 }
 
-// ... (Google Logic & Render Logic 保持不变，请直接使用之前发给你的代码，它们不需要改动) ...
-// (为了确保代码完整性，这里简略展示，实际上你需要保留上一版 renderer.js 中后半部分关于 renderFinal 和 renderPopup 的所有内容)
 
-async function callGoogleTranslate(text) {
+async function callGoogleTranslate(text, targetLang = 'zh-CN') {
     try {
-        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&dt=bd&q=${encodeURIComponent(text)}`;
+        // 将 tl=zh-CN 改为 tl=${targetLang}
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&dt=bd&q=${encodeURIComponent(text)}`;
         const resp = await fetch(url);
         if (!resp.ok) throw new Error("Google请求失败");
         return await resp.json();
@@ -221,18 +330,64 @@ function parseGoogleResult(json, originalText) {
     } catch (e) { return { general: "解析错误", coding: "无", phonetic: "" }; }
 }
 
-function renderSentenceResult(origin, trans, isCodeExplain) {
-    if (typeof trans !== 'string') { try { trans = trans[0][0][0]; } catch(e) {} }
-    const badgeHtml = isCodeExplain 
+
+
+function renderSentenceResult(origin, trans, isCodeExplainForce) {
+    let htmlContent = "";
+    let displayTrans = trans;
+    // 🔍 智能识别 AI 返回的标签
+    let isTech = isCodeExplainForce; // 默认跟随传入值
+
+    if (trans.startsWith('[TECH]')) {
+        isTech = true;
+        displayTrans = trans.replace('[TECH]', '').trim();
+    } else if (trans.startsWith('[GENERAL]')) {
+        isTech = false;
+        displayTrans = trans.replace('[GENERAL]', '').trim();
+    }
+
+    try {
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({ breaks: true, gfm: true });
+            htmlContent = marked.parse(displayTrans);
+        } else {
+            htmlContent = displayTrans;
+        }
+    } catch (e) { htmlContent = displayTrans; }
+
+    // 根据识别结果显示标签
+    const badgeHtml = isTech 
         ? `<span class="ds-tag tag-coding">代码解析</span>` 
         : `<span class="ds-tag tag-general">机器翻译</span>`;
     
     const html = `
         <div class="ds-section">
             <div class="ds-section-header">${badgeHtml}</div>
-            <div class="ds-text" style="white-space: pre-wrap;">${trans}</div>
+            <div class="ds-text markdown-body">${htmlContent}</div>
         </div>`;
-    renderPopup("Translation", html, "", true);
+
+    const contentArea = document.querySelector('.ds-content');
+    const currentTitle = document.querySelector('.ds-word-title-small');
+    
+    if (contentArea && currentTitle && currentTitle.innerText === "Translation") {
+        contentArea.innerHTML = html;
+        adjustWindowHeight(); 
+    } else {
+        renderPopup("Translation", html, "", true);
+    }
+}
+
+// 辅助函数：动态调整窗口高度
+function adjustWindowHeight() {
+    setTimeout(() => {
+        const header = document.querySelector('.ds-header');
+        const footer = document.querySelector('.ds-footer');
+        const content = document.querySelector('.ds-content');
+        if(header && footer && content) {
+            const total = header.offsetHeight + content.scrollHeight + footer.offsetHeight + 40; 
+            ipcRenderer.send('resize-main-window', Math.min(total, 650)); 
+        }
+    }, 10);
 }
 
 function renderFinal(word, gen, cod, pho, count, cache, engine) {
@@ -267,7 +422,7 @@ function renderPopup(title, content, phonetic, isSentence, footerText = "") {
     const phoneticHtml = (phonetic && !isSentence) ? `<span class="ds-phonetic-row">${phonetic}</span>` : '';
     const speakBtnId = isSentence ? "btn-read-sentence" : "btn-read-word";
     const pinClass = isPinned ? "icon-btn pinned" : "icon-btn";
-    
+
     container.innerHTML = `
     <div class="my-ds-popup">
         <div class="ds-header">
@@ -320,4 +475,5 @@ function renderPopup(title, content, phonetic, isSentence, footerText = "") {
             ipcRenderer.send('resize-main-window', finalHeight); 
         }
     }, 20);
+    
 }

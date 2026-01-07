@@ -204,7 +204,7 @@
         </div>
     </div>
 
-    <div id="deepseek-settings" class="section-card engine-config-block">
+   <div id="deepseek-settings" class="section-card engine-config-block">
         <div class="section-title">DeepSeek 配置</div>
         <div class="input-group">
             <div class="input-label-row">
@@ -214,21 +214,29 @@
             <input type="password" id="apiKey" placeholder="sk-xxxxxxxx" />
         </div>
         
-        <div class="switch-row">
+        <div class="switch-row" style="border-bottom: none; padding-bottom: 5px;">
             <div class="switch-label">
-                <span class="switch-title">👨‍💻 编程模式</span>
-                <span class="switch-desc">显示 [编程含义] 专属板块</span>
+                <span class="switch-title">👨‍💻 始终开启编程翻译</span>
+                <span class="switch-desc">强制使用编程词库</span>
             </div>
-            <input type="checkbox" id="enableCodeMode">
+            <input type="radio" name="dsCodeMode" id="dsCodeAlways" value="always">
         </div>
 
-        <div id="codeExplainGroup" class="sub-settings">
+        <div class="switch-row" style="padding-top: 5px;">
+            <div class="switch-label">
+                <span class="switch-title">🧠 智能编程翻译</span>
+                <span class="switch-desc">自动感应代码上下文</span>
+            </div>
+            <input type="radio" name="dsCodeMode" id="dsCodeSmart" value="smart">
+        </div>
+
+        <div id="dsCodeExplainGroup" class="sub-settings">
             <div class="switch-row" style="border:none;">
                 <div class="switch-label">
                     <span class="switch-title">🧩 代码逻辑解释</span>
-                    <span class="switch-desc">选中长句/代码时，分析其逻辑功能</span>
+                    <span class="switch-desc">分析长句逻辑功能</span>
                 </div>
-                <input type="checkbox" id="enableCodeExplain">
+                <input type="checkbox" id="dsEnableCodeExplain">
             </div>
         </div>
     </div>
@@ -243,21 +251,29 @@
             <input type="password" id="mimoKey" placeholder="输入小米 API Key..." />
         </div>
         
-        <div class="switch-row">
+        <div class="switch-row" style="border-bottom: none; padding-bottom: 5px;">
             <div class="switch-label">
-                <span class="switch-title">👨‍💻 编程模式</span>
-                <span class="switch-desc">显示 [编程含义] 专属板块</span>
+                <span class="switch-title">👨‍💻 始终开启编程翻译</span>
+                <span class="switch-desc">强制使用编程词库</span>
             </div>
-            <input type="checkbox" id="mimoEnableCodeMode">
+            <input type="radio" name="miCodeMode" id="miCodeAlways" value="always">
         </div>
 
-        <div id="mimoCodeExplainGroup" class="sub-settings">
+        <div class="switch-row" style="padding-top: 5px;">
+            <div class="switch-label">
+                <span class="switch-title">🧠 智能编程翻译</span>
+                <span class="switch-desc">AI 自动判断是否为代码</span>
+            </div>
+            <input type="radio" name="miCodeMode" id="miCodeSmart" value="smart">
+        </div>
+
+        <div id="miCodeExplainGroup" class="sub-settings">
             <div class="switch-row" style="border:none;">
                 <div class="switch-label">
                     <span class="switch-title">🧩 代码逻辑解释</span>
-                    <span class="switch-desc">选中长句/代码时，分析其逻辑功能</span>
+                    <span class="switch-desc">分析长句逻辑功能</span>
                 </div>
-                <input type="checkbox" id="mimoEnableCodeExplain">
+                <input type="checkbox" id="miEnableCodeExplain">
             </div>
         </div>
     </div>

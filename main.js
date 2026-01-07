@@ -14,8 +14,9 @@ process.on('uncaughtException', (error) => {
     logError(`💥 致命崩溃: ${error.stack || error}`);
 });
 
+const configData = loadConfig();
 let mainWindow, dashboardWindow, screenshotWindow, settingsWindow;
-let isPinned = false; 
+let isPinned = true; 
 let tray = null;
 let ocrWorker = null; 
 let lastShotBounds = null;
@@ -82,6 +83,7 @@ function createMainWindow() {
         transparent: true, 
         backgroundColor: '#00000000', 
         hasShadow: false, 
+        alwaysOnTop: isPinned,
         movable: true, // 允许拖动
         icon: fs.existsSync(ICON_PATH) ? ICON_PATH : null,
         webPreferences: { nodeIntegration: true, contextIsolation: false, backgroundThrottling: false },
@@ -109,9 +111,26 @@ function createTray() {
     } catch (e) {}
 }
 
+
+
+
+
+
 ipcMain.on('toggle-pin', (event, pinned) => {
     isPinned = pinned;
-    if (mainWindow) mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    
+    // 持久化到本地文件
+    try {
+        const config = loadConfig();
+        config.isPinned = pinned;
+        fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+    } catch (e) {
+        console.error("保存置顶配置失败:", e);
+    }
+
+    if (mainWindow) {
+        mainWindow.setAlwaysOnTop(pinned, 'screen-saver');
+    }
 });
 
 ipcMain.on('save-dark-mode', (event, isDark) => {
@@ -150,16 +169,39 @@ ipcMain.on('resize-main-window', (event, contentHeight) => {
 });
 
 function createDashboardWindow() {
-    if (dashboardWindow && !dashboardWindow.isDestroyed()) { dashboardWindow.focus(); return; }
+    if (dashboardWindow && !dashboardWindow.isDestroyed()) { 
+        dashboardWindow.focus(); 
+        return; 
+    }
+    
     dashboardWindow = new BrowserWindow({
-        width: 900, height: 600, title: "单词统计", autoHideMenuBar: true, 
+        // 初始大小可以保留，或者直接设为较宽的值
+        width: 1200, 
+        height: 800, 
+        title: "单词统计", 
+        autoHideMenuBar: true, 
         icon: fs.existsSync(ICON_PATH) ? ICON_PATH : null,
-        webPreferences: { nodeIntegration: true, contextIsolation: false }
+        webPreferences: { 
+            nodeIntegration: true, 
+            contextIsolation: false 
+        },
+        show: false // 先隐藏，等最大化后再显示，防止闪烁
     });
-    dashboardWindow.loadFile('dashboard.html');
-    dashboardWindow.on('closed', () => { dashboardWindow = null; });
-}
 
+    // 让窗口最大化
+    dashboardWindow.maximize(); 
+    
+    dashboardWindow.loadFile('dashboard.html');
+    
+    // 最大化后再显示窗口
+    dashboardWindow.once('ready-to-show', () => {
+        dashboardWindow.show();
+    });
+
+    dashboardWindow.on('closed', () => { 
+        dashboardWindow = null; 
+    });
+}
 function createSettingsWindow() {
     if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.focus(); return; }
     settingsWindow = new BrowserWindow({
@@ -485,16 +527,18 @@ function showWindowAndTranslate(text, isOcr = false) {
     const x = Math.round(workArea.x + (workArea.width - width) / 2);
     const y = Math.round(workArea.y + (workArea.height - height) / 2);
 
+    isPinned = true;
+
     mainWindow.setBounds({ x, y, width, height });
-    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    mainWindow.setAlwaysOnTop(isPinned, 'screen-saver');
     mainWindow.show();
     mainWindow.focus(); 
     
     if(!isOcr && text) mainWindow.webContents.send('start-translation', text);
 }
 
-ipcMain.on('open-dashboard', () => { createDashboardWindow(); mainWindow.hide(); });
-ipcMain.on('open-settings', () => { createSettingsWindow(); mainWindow.hide(); });
+ipcMain.on('open-dashboard', () => { createDashboardWindow();  });
+ipcMain.on('open-settings', () => { createSettingsWindow();  });
 ipcMain.on('hide-window', () => mainWindow.hide());
 app.on('will-quit', () => { globalShortcut.unregisterAll(); if (ocrWorker) ocrWorker.terminate(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
