@@ -1,9 +1,129 @@
-const { app, BrowserWindow, clipboard, screen, globalShortcut, ipcMain, desktopCapturer, Tray, Menu, nativeImage, dialog } = require('electron');
+
+const { app, BrowserWindow, clipboard, screen, globalShortcut, ipcMain, desktopCapturer, Tray, Menu, nativeImage, dialog, shell, net } = require('electron');
 const { execFile, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const Tesseract = require('tesseract.js');
 const os = require('os');
+const SYSTEM32 = process.env.SystemRoot
+  ? path.join(process.env.SystemRoot, 'System32')
+  : 'C:\\Windows\\System32';
+
+const POWERSHELL_EXE = path.join(SYSTEM32, 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const WSCRIPT_EXE = path.join(SYSTEM32, 'wscript.exe');
+
+const isPackaged = app.isPackaged;
+const RESOURCE_PATH = isPackaged 
+    ? process.resourcesPath // ✅ 改这里！直接指向 extraResources 释放的位置
+    : __dirname;
+
+function resolveCopyVbsPath() {
+const candidates = [
+    // electron-builder extraResources 常见位置
+    path.join(process.resourcesPath, 'copy.vbs'),
+    // asarUnpack 常见位置
+    path.join(process.resourcesPath, 'app.asar.unpacked', 'copy.vbs'),
+    // 开发态
+    path.join(__dirname, 'copy.vbs'),
+  ];
+  return candidates.find(p => fs.existsSync(p)) || null;
+}
+
+let lastCheckTime = 0;
+let isChecking = false;
+
+function checkUpdate() {
+    // 🛑 1. 节流阀：如果正在检查，或者距离上次检查不到 30 分钟，直接跳过
+    // 避免用户频繁翻译时狂刷 GitHub API (API 限制每小时 60 次)
+    const now = Date.now();
+    if (isChecking) return;
+    if (now - lastCheckTime < 1000 * 60 * 30) { 
+        return; 
+    }
+
+    // 🕒 全局变量：记录检查状态
+let lastCheckTime = 0;
+let isChecking = false;
+let hasIgnoredUpdate = false; // 🆕 新增：记录用户是否点过“以后再说”
+
+function checkUpdate() {
+    // 🛑 1. 如果用户已经点过“以后再说”，本次运行期间彻底不再检查
+    if (hasIgnoredUpdate) {
+        return;
+    }
+
+    // 🛑 2. 节流阀：防止频繁请求 (30分钟内只查一次)
+    const now = Date.now();
+    if (isChecking) return;
+    if (now - lastCheckTime < 1000 * 60 * 30) { 
+        return; 
+    }
+
+    isChecking = true;
+    lastCheckTime = now;
+
+    // 你的 GitHub API 地址
+    const updateUrl = 'https://api.github.com/repos/Never-lose/deepseek-translator/releases/latest';
+    const request = net.request(updateUrl);
+    
+    request.on('response', (response) => {
+        let body = '';
+        response.on('data', (chunk) => body += chunk);
+        
+        response.on('end', () => {
+            isChecking = false; // 解锁状态
+
+            if (response.statusCode === 200) {
+                try {
+                    const data = JSON.parse(body);
+                    const latestVersion = data.tag_name.replace('v', '');
+                    const currentVersion = app.getVersion();
+
+                    if (latestVersion > currentVersion) {
+                        // 发现新版本，弹窗提示
+                        dialog.showMessageBox(mainWindow, {
+                            type: 'info',
+                            title: '发现新版本',
+                            message: `🎉 发现新版本 v${latestVersion}，是否去下载？`,
+                            detail: `当前版本: v${currentVersion}\n\n更新内容:\n${data.body}`,
+                            buttons: ['🚀 去下载', '🙈 本次不再提醒'], // 按钮 0 和 1
+                            defaultId: 0,
+                            cancelId: 1 // 点右上角 X 关闭窗口 = 点击按钮 1
+                        }).then(({ response }) => {
+                            if (response === 0) {
+                                // 0: 去下载
+                                shell.openExternal(data.html_url);
+                            } else {
+                                // 1: 以后再说 (或者直接关掉了窗口)
+                                hasIgnoredUpdate = true; // 🆕 关键：标记为已忽略，内存变量，重启后失效
+                                console.log("用户选择本次不再提醒更新");
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.error("版本解析失败");
+                }
+            }
+        });
+    });
+    
+    request.on('error', (err) => {
+        isChecking = false;
+        // console.error("更新检查网络错误", err.message);
+    });
+    
+    request.end();
+}
+
+function triggerCopy() {
+    const psCommand = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^c');`;
+    const ps = spawn('powershell', ['-NoProfile', '-Command', psCommand]);
+
+    ps.on('error', () => {
+        const vbsPath = path.join(__dirname, 'copy.vbs');
+        execFile('cscript', ['//Nologo', vbsPath], () => {});
+    });
+}
 
 // 🛡️ 崩溃日志
 const crashLogPath = path.join(os.homedir(), 'Desktop', 'deepseek_crash_log.txt');
@@ -221,16 +341,8 @@ ipcMain.on('resize-settings-window', (event, contentHeight) => {
     if (settingsWindow) settingsWindow.setContentSize(400, contentHeight);
 });
 
-function triggerCopy() {
-    const psCommand = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^c');`;
-    const ps = spawn('powershell', ['-NoProfile', '-Command', psCommand]);
-    ps.on('error', () => {
-        const vbsPath = path.join(__dirname, 'copy.vbs');
-        execFile('cscript', ['//Nologo', vbsPath], () => {});
-    });
-}
 
-// 💎 核心补全：开机自启逻辑
+//  核心补全：开机自启逻辑
 function updateAutoLaunch(isEnabled) {
     // 只有打包后的 exe 才真正执行注册表操作，避免开发时每次都弹窗
     if (!app.isPackaged) {
@@ -248,22 +360,25 @@ function updateAutoLaunch(isEnabled) {
 function applyConfig() {
     globalShortcut.unregisterAll();
     const config = loadConfig();
-    
-    // 💎 应用开机自启配置
     updateAutoLaunch(config.autoLaunch);
 
     try {
         globalShortcut.register(config.shortcutTranslate, () => {
             clipboard.clear();
             triggerCopy();
+
             let attempts = 0;
             const checkTimer = setInterval(() => {
                 attempts++;
                 const text = clipboard.readText().trim();
-                if (text && text.length > 0) { clearInterval(checkTimer); showWindowAndTranslate(text); }
+                if (text && text.length > 0) {
+                    clearInterval(checkTimer);
+                    showWindowAndTranslate(text);
+                }
                 if (attempts >= 20) clearInterval(checkTimer);
             }, 50);
         });
+
         globalShortcut.register(config.shortcutOcr, () => startScreenshot());
     } catch (e) {}
 }
@@ -272,6 +387,8 @@ app.whenReady().then(async () => {
     createMainWindow(); 
     createTray(); 
     applyConfig();
+
+    setTimeout(() => checkUpdate(), 30000);
     setTimeout(() => initOcrEngine(), 1000);
 });
 
@@ -535,6 +652,7 @@ function showWindowAndTranslate(text, isOcr = false) {
     mainWindow.focus(); 
     
     if(!isOcr && text) mainWindow.webContents.send('start-translation', text);
+    checkUpdate();
 }
 
 ipcMain.on('open-dashboard', () => { createDashboardWindow();  });
