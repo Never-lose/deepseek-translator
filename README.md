@@ -137,7 +137,7 @@ v1.3.0 (Latest)
 
 - ✨ **核心代码生成**: [Google Gemini](https://gemini.google.com/)
 - 🎨 **程序图标提供**: "海绵宝宝"
-- 🤖 **模型支持**: DeepSeek, Xiaomi Cloud-ML, Google Translate
+- 🤖 **模型支持**: DeepSeek, Xiaomi MIMO, Google Translate
 
 ------
 
