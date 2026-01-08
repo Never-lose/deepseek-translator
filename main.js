@@ -114,7 +114,7 @@ function checkUpdate() {
     
     request.end();
 }
-
+}
 function triggerCopy() {
     const psCommand = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^c');`;
     const ps = spawn('powershell', ['-NoProfile', '-Command', psCommand]);
