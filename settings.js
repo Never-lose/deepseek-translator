@@ -14,7 +14,7 @@ const DEFAULT_CONFIG = {
     shortcutTranslate: "Ctrl+Q",
     shortcutOcr: "Ctrl+Alt+Q",
     autoLaunch: false,
-    darkMode: false,
+    theme: "light",
     // 核心模式配置
     codeModeType: "always", 
     mimoCodeModeType: "always",
@@ -30,9 +30,11 @@ const apiKeyInput = document.getElementById('apiKey');
 const mimoKeyInput = document.getElementById('mimoKey');
 const translateInput = document.getElementById('shortcutTranslate');
 const ocrInput = document.getElementById('shortcutOcr');
+// 🔴 修复点1：允许这个元素不存在，后续使用时会检查
 const autoLaunchCheckbox = document.getElementById('autoLaunch');
 const btnSave = document.getElementById('btnSave');
-const darkModeCheckbox = document.getElementById('darkMode');
+const themeSelect = document.getElementById('themeSelect');
+
 
 // DeepSeek 专属元素 (带 ds 前缀)
 const dsCodeAlways = document.getElementById('dsCodeAlways');
@@ -70,24 +72,38 @@ function initSettings() {
     const config = loadConfig();
     
     // 1. 基础信息回显
-    apiKeyInput.value = config.apiKey || "";
-    mimoKeyInput.value = config.mimoKey || "";
-    translateInput.value = config.shortcutTranslate;
-    ocrInput.value = config.shortcutOcr;
-    autoLaunchCheckbox.checked = config.autoLaunch;
-    darkModeCheckbox.checked = config.darkMode;
+    if(apiKeyInput) apiKeyInput.value = config.apiKey || "";
+    if(mimoKeyInput) mimoKeyInput.value = config.mimoKey || "";
+    if(translateInput) translateInput.value = config.shortcutTranslate;
+    if(ocrInput) ocrInput.value = config.shortcutOcr;
+    
+    // 🔴 修复点2：只有当 HTML 里存在这个勾选框时，才去设置它的状态
+    if (autoLaunchCheckbox) {
+        autoLaunchCheckbox.checked = config.autoLaunch;
+    }
+
+    if (config.theme && themeSelect) {
+        themeSelect.value = config.theme;
+    } else if (themeSelect) {
+        // 如果是旧用户只有 darkMode，帮他转成 theme
+        themeSelect.value = config.darkMode ? "dark" : "light";
+    }
+    if(themeSelect) applyTheme(themeSelect.value);
 
     // 2. DeepSeek 模式回显
-    if (config.codeModeType === 'smart') dsCodeSmart.checked = true;
-    else dsCodeAlways.checked = true;
-    dsCodeExplainCheckbox.checked = config.enableCodeExplain !== undefined ? config.enableCodeExplain : true;
+    if(dsCodeSmart && dsCodeAlways) {
+        if (config.codeModeType === 'smart') dsCodeSmart.checked = true;
+        else dsCodeAlways.checked = true;
+    }
+    if(dsCodeExplainCheckbox) dsCodeExplainCheckbox.checked = config.enableCodeExplain !== undefined ? config.enableCodeExplain : true;
 
     // 3. Xiaomi 模式回显
-    if (config.mimoCodeModeType === 'smart') miCodeSmart.checked = true;
-    else miCodeAlways.checked = true;
-    miCodeExplainCheckbox.checked = config.mimoEnableCodeExplain !== undefined ? config.mimoEnableCodeExplain : true;
+    if(miCodeSmart && miCodeAlways) {
+        if (config.mimoCodeModeType === 'smart') miCodeSmart.checked = true;
+        else miCodeAlways.checked = true;
+    }
+    if(miCodeExplainCheckbox) miCodeExplainCheckbox.checked = config.mimoEnableCodeExplain !== undefined ? config.mimoEnableCodeExplain : true;
 
-    applyTheme(config.darkMode);
     selectEngine(config.engine || 'google');
     
     // 更新子选项显隐
@@ -96,12 +112,19 @@ function initSettings() {
 }
 
 // --- 交互逻辑 ---
-function applyTheme(dark) {
-    if (dark) document.body.classList.add('dark-mode');
-    else document.body.classList.remove('dark-mode');
+function applyTheme(theme) {
+    document.body.classList.remove('dark-mode', 'transparent-mode');
+    if (theme === 'dark') {
+        document.body.classList.add('dark-mode');
+    } else if (theme === 'transparent') {
+        document.body.classList.add('dark-mode', 'transparent-mode');
+    }
 }
 
 function updateDeepSeekSub() {
+    // 🔴 修复点3：增加判空保护，防止元素不存在报错
+    if (!dsCodeAlways || !dsCodeExplainGroup) return;
+
     // 只有“始终开启”时才显示“逻辑解释”
     if (dsCodeAlways.checked) dsCodeExplainGroup.classList.add('visible');
     else dsCodeExplainGroup.classList.remove('visible');
@@ -109,6 +132,8 @@ function updateDeepSeekSub() {
 }
 
 function updateXiaomiSub() {
+    if (!miCodeAlways || !miCodeExplainGroup) return;
+
     if (miCodeAlways.checked) miCodeExplainGroup.classList.add('visible');
     else miCodeExplainGroup.classList.remove('visible');
     requestResize();
@@ -124,34 +149,37 @@ function requestResize() {
 }
 
 // --- 事件监听 ---
-dsCodeAlways.addEventListener('change', updateDeepSeekSub);
-dsCodeSmart.addEventListener('change', updateDeepSeekSub);
-miCodeAlways.addEventListener('change', updateXiaomiSub);
-miCodeSmart.addEventListener('change', updateXiaomiSub);
+if(dsCodeAlways) dsCodeAlways.addEventListener('change', updateDeepSeekSub);
+if(dsCodeSmart) dsCodeSmart.addEventListener('change', updateDeepSeekSub);
+if(miCodeAlways) miCodeAlways.addEventListener('change', updateXiaomiSub);
+if(miCodeSmart) miCodeSmart.addEventListener('change', updateXiaomiSub);
 
-darkModeCheckbox.addEventListener('change', () => {
-    const isDark = darkModeCheckbox.checked;
-    applyTheme(isDark);
-    ipcRenderer.send('save-dark-mode', isDark);
-});
+if(themeSelect) {
+    themeSelect.addEventListener('change', () => {
+        const theme = themeSelect.value;
+        applyTheme(theme);
+        ipcRenderer.send('save-theme', theme); // 发送新信号
+    });
+}
 
 window.selectEngine = function(engine) {
     currentEngine = engine;
-    [cardGoogle, cardDeepseek, cardXiaomi].forEach(c => c.classList.remove('active'));
-    [deepseekSettings, xiaomiSettings].forEach(s => s.classList.remove('visible'));
+    [cardGoogle, cardDeepseek, cardXiaomi].forEach(c => { if(c) c.classList.remove('active') });
+    [deepseekSettings, xiaomiSettings].forEach(s => { if(s) s.classList.remove('visible') });
 
-    if (engine === 'google') cardGoogle.classList.add('active');
-    else if (engine === 'deepseek') {
+    if (engine === 'google' && cardGoogle) cardGoogle.classList.add('active');
+    else if (engine === 'deepseek' && cardDeepseek) {
         cardDeepseek.classList.add('active');
-        deepseekSettings.classList.add('visible');
-    } else if (engine === 'xiaomi') {
+        if(deepseekSettings) deepseekSettings.classList.add('visible');
+    } else if (engine === 'xiaomi' && cardXiaomi) {
         cardXiaomi.classList.add('active');
-        xiaomiSettings.classList.add('visible');
+        if(xiaomiSettings) xiaomiSettings.classList.add('visible');
     }
     requestResize();
 }
 
 function recordShortcut(inputElement) {
+    if(!inputElement) return;
     inputElement.addEventListener('keydown', (e) => {
         e.preventDefault();
         if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
@@ -169,45 +197,48 @@ recordShortcut(translateInput);
 recordShortcut(ocrInput);
 
 // --- 保存逻辑 ---
-btnSave.addEventListener('click', () => {
-    const newConfig = {
-        ...loadConfig(),
-        engine: currentEngine,
-        apiKey: apiKeyInput.value.trim(),
-        mimoKey: mimoKeyInput.value.trim(),
-        shortcutTranslate: translateInput.value,
-        shortcutOcr: ocrInput.value,
-        autoLaunch: autoLaunchCheckbox.checked,
-        darkMode: darkModeCheckbox.checked,
+if(btnSave) {
+    btnSave.addEventListener('click', () => {
+        const newConfig = {
+            ...loadConfig(),
+            engine: currentEngine,
+            apiKey: apiKeyInput ? apiKeyInput.value.trim() : "",
+            mimoKey: mimoKeyInput ? mimoKeyInput.value.trim() : "",
+            shortcutTranslate: translateInput ? translateInput.value : "Ctrl+Q",
+            shortcutOcr: ocrInput ? ocrInput.value : "Ctrl+Alt+Q",
+            // 🔴 修复点4：保存时也检查元素是否存在
+            autoLaunch: autoLaunchCheckbox ? autoLaunchCheckbox.checked : false,
+            theme: themeSelect ? themeSelect.value : "light",
 
-        // 核心模式保存
-        codeModeType: dsCodeAlways.checked ? "always" : "smart",
-        mimoCodeModeType: miCodeAlways.checked ? "always" : "smart",
-        
-        // 兼容旧版布尔值逻辑：只有 Always 模式算真正开启
-        enableCodeMode: dsCodeAlways.checked, 
-        mimoEnableCodeMode: miCodeAlways.checked,
+            // 核心模式保存
+            codeModeType: (dsCodeAlways && dsCodeAlways.checked) ? "always" : "smart",
+            mimoCodeModeType: (miCodeAlways && miCodeAlways.checked) ? "always" : "smart",
+            
+            // 兼容旧版布尔值逻辑
+            enableCodeMode: (dsCodeAlways && dsCodeAlways.checked), 
+            mimoEnableCodeMode: (miCodeAlways && miCodeAlways.checked),
 
-        // 解释勾选框状态
-        enableCodeExplain: dsCodeExplainCheckbox.checked,
-        mimoEnableCodeExplain: miCodeExplainCheckbox.checked
-    };
+            // 解释勾选框状态
+            enableCodeExplain: dsCodeExplainCheckbox ? dsCodeExplainCheckbox.checked : true,
+            mimoEnableCodeExplain: miCodeExplainCheckbox ? miCodeExplainCheckbox.checked : true
+        };
 
-    try {
-        fs.writeFileSync(CONFIG_PATH, JSON.stringify(newConfig, null, 2));
-        ipcRenderer.send('settings-updated');
-        
-        const originalText = btnSave.innerText;
-        btnSave.innerText = "✅ 已保存";
-        btnSave.style.background = "#4CAF50";
-        setTimeout(() => { 
-            btnSave.innerText = originalText; 
-            btnSave.style.background = ""; 
-        }, 1500);
-    } catch (e) {
-        alert('❌ 保存失败: ' + e.message);
-    }
-});
+        try {
+            fs.writeFileSync(CONFIG_PATH, JSON.stringify(newConfig, null, 2));
+            ipcRenderer.send('settings-updated');
+            
+            const originalText = btnSave.innerText;
+            btnSave.innerText = "✅ 已保存";
+            btnSave.style.background = "#4CAF50";
+            setTimeout(() => { 
+                btnSave.innerText = originalText; 
+                btnSave.style.background = ""; 
+            }, 1500);
+        } catch (e) {
+            alert('❌ 保存失败: ' + e.message);
+        }
+    });
+}
 
 // 初始化
 initSettings();

@@ -278,6 +278,8 @@
         </div>
     </div>
 
+
+
     <div class="section-card">
         <div class="section-title">快捷键 & 常规</div>
         <div class="input-group">
@@ -288,20 +290,21 @@
             <div class="input-label-row"><label>截图识别</label></div>
             <input type="text" id="shortcutOcr" class="shortcut-display" readonly />
         </div>
-        
-        <div class="switch-row">
+        <div class="switch-row" style="margin-top: 10px;">
             <div class="switch-label">
                 <span class="switch-title">🚀 开机自启</span>
+                <span class="switch-desc">跟随系统启动自动运行</span>
             </div>
             <input type="checkbox" id="autoLaunch">
         </div>
-        
-        <div class="switch-row">
-            <div class="switch-label">
-                <span class="switch-title">🌙 深色模式</span>
-            </div>
-            <input type="checkbox" id="darkMode">
-        </div>
+        <div class="input-group" style="margin-top: 10px;">
+        <div class="input-label-row"><label>🎨 界面主题</label></div>
+        <select id="themeSelect" style="width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text);">
+        <option value="light">☀️ 明亮主题 (Light)</option>
+        <option value="dark">🌙 暗色主题 (Dark)</option>
+        <option value="transparent">💧 透明磨砂 (Glass)</option>
+            </select>
+        </div>  
     </div>
 
     <button id="btnSave" class="save-btn">保存配置</button>

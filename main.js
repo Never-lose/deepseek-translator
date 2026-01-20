@@ -1,129 +1,19 @@
-
 const { app, BrowserWindow, clipboard, screen, globalShortcut, ipcMain, desktopCapturer, Tray, Menu, nativeImage, dialog, shell, net } = require('electron');
+
+app.disableHardwareAcceleration();
+
 const { execFile, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const Tesseract = require('tesseract.js');
 const os = require('os');
-const SYSTEM32 = process.env.SystemRoot
-  ? path.join(process.env.SystemRoot, 'System32')
-  : 'C:\\Windows\\System32';
 
+// 系统路径定义
+const SYSTEM32 = process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32') : 'C:\\Windows\\System32';
 const POWERSHELL_EXE = path.join(SYSTEM32, 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-const WSCRIPT_EXE = path.join(SYSTEM32, 'wscript.exe');
 
 const isPackaged = app.isPackaged;
-const RESOURCE_PATH = isPackaged 
-    ? process.resourcesPath // ✅ 改这里！直接指向 extraResources 释放的位置
-    : __dirname;
-
-function resolveCopyVbsPath() {
-const candidates = [
-    // electron-builder extraResources 常见位置
-    path.join(process.resourcesPath, 'copy.vbs'),
-    // asarUnpack 常见位置
-    path.join(process.resourcesPath, 'app.asar.unpacked', 'copy.vbs'),
-    // 开发态
-    path.join(__dirname, 'copy.vbs'),
-  ];
-  return candidates.find(p => fs.existsSync(p)) || null;
-}
-
-let lastCheckTime = 0;
-let isChecking = false;
-
-function checkUpdate() {
-    // 🛑 1. 节流阀：如果正在检查，或者距离上次检查不到 30 分钟，直接跳过
-    // 避免用户频繁翻译时狂刷 GitHub API (API 限制每小时 60 次)
-    const now = Date.now();
-    if (isChecking) return;
-    if (now - lastCheckTime < 1000 * 60 * 30) { 
-        return; 
-    }
-
-    // 🕒 全局变量：记录检查状态
-let lastCheckTime = 0;
-let isChecking = false;
-let hasIgnoredUpdate = false; // 🆕 新增：记录用户是否点过“以后再说”
-
-function checkUpdate() {
-    // 🛑 1. 如果用户已经点过“以后再说”，本次运行期间彻底不再检查
-    if (hasIgnoredUpdate) {
-        return;
-    }
-
-    // 🛑 2. 节流阀：防止频繁请求 (30分钟内只查一次)
-    const now = Date.now();
-    if (isChecking) return;
-    if (now - lastCheckTime < 1000 * 60 * 30) { 
-        return; 
-    }
-
-    isChecking = true;
-    lastCheckTime = now;
-
-    // 你的 GitHub API 地址
-    const updateUrl = 'https://api.github.com/repos/Never-lose/deepseek-translator/releases/latest';
-    const request = net.request(updateUrl);
-    
-    request.on('response', (response) => {
-        let body = '';
-        response.on('data', (chunk) => body += chunk);
-        
-        response.on('end', () => {
-            isChecking = false; // 解锁状态
-
-            if (response.statusCode === 200) {
-                try {
-                    const data = JSON.parse(body);
-                    const latestVersion = data.tag_name.replace('v', '');
-                    const currentVersion = app.getVersion();
-
-                    if (latestVersion > currentVersion) {
-                        // 发现新版本，弹窗提示
-                        dialog.showMessageBox(mainWindow, {
-                            type: 'info',
-                            title: '发现新版本',
-                            message: `🎉 发现新版本 v${latestVersion}，是否去下载？`,
-                            detail: `当前版本: v${currentVersion}\n\n更新内容:\n${data.body}`,
-                            buttons: ['🚀 去下载', '🙈 本次不再提醒'], // 按钮 0 和 1
-                            defaultId: 0,
-                            cancelId: 1 // 点右上角 X 关闭窗口 = 点击按钮 1
-                        }).then(({ response }) => {
-                            if (response === 0) {
-                                // 0: 去下载
-                                shell.openExternal(data.html_url);
-                            } else {
-                                // 1: 以后再说 (或者直接关掉了窗口)
-                                hasIgnoredUpdate = true; // 🆕 关键：标记为已忽略，内存变量，重启后失效
-                                console.log("用户选择本次不再提醒更新");
-                            }
-                        });
-                    }
-                } catch (e) {
-                    console.error("版本解析失败");
-                }
-            }
-        });
-    });
-    
-    request.on('error', (err) => {
-        isChecking = false;
-        // console.error("更新检查网络错误", err.message);
-    });
-    
-    request.end();
-}
-}
-function triggerCopy() {
-    const psCommand = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^c');`;
-    const ps = spawn('powershell', ['-NoProfile', '-Command', psCommand]);
-
-    ps.on('error', () => {
-        const vbsPath = path.join(__dirname, 'copy.vbs');
-        execFile('cscript', ['//Nologo', vbsPath], () => {});
-    });
-}
+const RESOURCE_PATH = isPackaged ? process.resourcesPath : __dirname;
 
 // 🛡️ 崩溃日志
 const crashLogPath = path.join(os.homedir(), 'Desktop', 'deepseek_crash_log.txt');
@@ -134,14 +24,88 @@ process.on('uncaughtException', (error) => {
     logError(`💥 致命崩溃: ${error.stack || error}`);
 });
 
-const configData = loadConfig();
+// 🔄 自动更新逻辑
+let lastCheckTime = 0;
+let isChecking = false;
+let hasIgnoredUpdate = false; 
+
+function checkUpdate() {
+    if (hasIgnoredUpdate) return;
+    const now = Date.now();
+    if (isChecking) return;
+    if (now - lastCheckTime < 1000 * 60 * 30) return; // 30分钟冷却
+
+    isChecking = true;
+    lastCheckTime = now;
+
+    // GitHub API 地址
+    const updateUrl = 'https://api.github.com/repos/Never-lose/deepseek-translator/releases/latest';
+    const request = net.request(updateUrl);
+    
+    request.on('response', (response) => {
+        let body = '';
+        response.on('data', (chunk) => body += chunk);
+        
+        response.on('end', () => {
+            isChecking = false;
+            if (response.statusCode === 200) {
+                try {
+                    const data = JSON.parse(body);
+                    const latestVersion = data.tag_name.replace('v', '');
+                    const currentVersion = app.getVersion();
+
+                    if (latestVersion > currentVersion) {
+                        dialog.showMessageBox(mainWindow, {
+                            type: 'info',
+                            title: '发现新版本',
+                            message: `🎉 发现新版本 v${latestVersion}，是否去下载？`,
+                            detail: `当前版本: v${currentVersion}\n\n更新内容:\n${data.body}`,
+                            buttons: ['🚀 去下载', '🙈 本次不再提醒'], 
+                            defaultId: 0,
+                            cancelId: 1 
+                        }).then(({ response }) => {
+                            if (response === 0) {
+                                shell.openExternal(data.html_url);
+                            } else {
+                                hasIgnoredUpdate = true; 
+                            }
+                        });
+                    }
+                } catch (e) { console.error("版本解析失败"); }
+            }
+        });
+    });
+    
+    request.on('error', () => { isChecking = false; });
+    request.end();
+}
+
+//  剪贴板复制触发
+function triggerCopy() {
+    // 优先尝试 PowerShell
+    const ps = spawn(POWERSHELL_EXE, [
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 
+        `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^c')`
+    ], { cwd: os.tmpdir() });
+
+    ps.on('error', () => runVbsFallback());
+    ps.on('close', (code) => { if (code !== 0) runVbsFallback(); });
+
+    // 失败回退 VBS
+    const runVbsFallback = () => {
+        const vbsPath = path.join(RESOURCE_PATH, 'copy.vbs');
+        if (fs.existsSync(vbsPath)) {
+            execFile('cscript', ['//Nologo', vbsPath], { cwd: RESOURCE_PATH }, () => {});
+        }
+    };
+}
+
 let mainWindow, dashboardWindow, screenshotWindow, settingsWindow;
 let isPinned = true; 
 let tray = null;
 let ocrWorker = null; 
 let lastShotBounds = null;
 
-// 单例锁
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) { app.quit(); } else {
     app.on('second-instance', () => {
@@ -190,7 +154,7 @@ ipcMain.on('get-user-data-path', (event) => { event.returnValue = USER_DATA_PATH
 
 function loadConfig() {
     try { if (fs.existsSync(CONFIG_PATH)) return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')); } catch (e) {}
-    return { engine: "google", apiKey: "", shortcutTranslate: "Ctrl+Q", shortcutOcr: "Ctrl+Alt+Q", autoLaunch: false, enableCodeMode: true, enableCodeExplain: true, darkMode: false };
+    return { engine: "google", apiKey: "", shortcutTranslate: "Ctrl+Q", shortcutOcr: "Ctrl+Alt+Q", autoLaunch: false, theme: "light" };
 }
 
 function createMainWindow() {
@@ -201,15 +165,19 @@ function createMainWindow() {
         resizable: false, 
         skipTaskbar: true,
         transparent: true, 
-        backgroundColor: '#00000000', 
+        backgroundColor: '#00000000', // 全透明背景
         hasShadow: false, 
-        alwaysOnTop: isPinned,
-        movable: true, // 允许拖动
+        movable: true,
         icon: fs.existsSync(ICON_PATH) ? ICON_PATH : null,
         webPreferences: { nodeIntegration: true, contextIsolation: false, backgroundThrottling: false },
         show: false
     });
+    
+    
+    // mainWindow.setContentProtection(true); 
+
     mainWindow.loadFile('index.html');
+    mainWindow.setAlwaysOnTop(isPinned, 'screen-saver');
     mainWindow.webContents.on('render-process-gone', () => { mainWindow = null; createMainWindow(); });
 }
 
@@ -231,105 +199,60 @@ function createTray() {
     } catch (e) {}
 }
 
-
-
-
-
-
 ipcMain.on('toggle-pin', (event, pinned) => {
     isPinned = pinned;
-    
-    // 持久化到本地文件
     try {
         const config = loadConfig();
         config.isPinned = pinned;
         fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-    } catch (e) {
-        console.error("保存置顶配置失败:", e);
-    }
-
-    if (mainWindow) {
-        mainWindow.setAlwaysOnTop(pinned, 'screen-saver');
-    }
+    } catch (e) {}
+    if (mainWindow) mainWindow.setAlwaysOnTop(pinned, 'screen-saver');
 });
 
-ipcMain.on('save-dark-mode', (event, isDark) => {
+ipcMain.on('save-theme', (event, theme) => {
     const config = loadConfig();
-    config.darkMode = isDark;
+    config.theme = theme;
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('theme-changed', isDark);
-    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.webContents.send('theme-changed', isDark);
-    if (dashboardWindow && !dashboardWindow.isDestroyed()) dashboardWindow.webContents.send('theme-changed', isDark);
+    [mainWindow, settingsWindow, dashboardWindow].forEach(win => {
+        if (win && !win.isDestroyed()) win.webContents.send('theme-changed', theme);
+    });
 });
 
 ipcMain.on('data-updated', () => { if (dashboardWindow) dashboardWindow.webContents.send('refresh-data'); });
 
-// 窗口智能伸缩
 ipcMain.on('resize-main-window', (event, contentHeight) => {
     if (mainWindow) {
         const bounds = mainWindow.getBounds();
         const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
         const workArea = display.workArea;
-
         const width = 340;
         const newHeight = parseInt(contentHeight);
-
-        // 以当前位置为中心伸缩
         const currentCenterY = bounds.y + (bounds.height / 2);
         let newY = Math.round(currentCenterY - (newHeight / 2));
-
         if (newY < workArea.y) newY = workArea.y + 10; 
-        if (newY + newHeight > workArea.y + workArea.height) {
-            newY = workArea.y + workArea.height - newHeight - 10; 
-        }
-
+        if (newY + newHeight > workArea.y + workArea.height) newY = workArea.y + workArea.height - newHeight - 10; 
         mainWindow.setBounds({ x: bounds.x, y: newY, width, height: newHeight });
     }
 });
 
 function createDashboardWindow() {
-    if (dashboardWindow && !dashboardWindow.isDestroyed()) { 
-        dashboardWindow.focus(); 
-        return; 
-    }
-    
+    if (dashboardWindow && !dashboardWindow.isDestroyed()) { dashboardWindow.focus(); return; }
     dashboardWindow = new BrowserWindow({
-        // 初始大小可以保留，或者直接设为较宽的值
-        width: 1200, 
-        height: 800, 
-        title: "单词统计", 
-        autoHideMenuBar: true, 
+        width: 1200, height: 800, title: "单词统计", autoHideMenuBar: true,
         icon: fs.existsSync(ICON_PATH) ? ICON_PATH : null,
-        webPreferences: { 
-            nodeIntegration: true, 
-            contextIsolation: false 
-        },
-        show: false // 先隐藏，等最大化后再显示，防止闪烁
+        webPreferences: { nodeIntegration: true, contextIsolation: false },
+        show: false 
     });
-
-    // 让窗口最大化
     dashboardWindow.maximize(); 
-    
     dashboardWindow.loadFile('dashboard.html');
-    
-    // 最大化后再显示窗口
-    dashboardWindow.once('ready-to-show', () => {
-        dashboardWindow.show();
-    });
-
-    dashboardWindow.on('closed', () => { 
-        dashboardWindow = null; 
-    });
+    dashboardWindow.once('ready-to-show', () => { dashboardWindow.show(); });
+    dashboardWindow.on('closed', () => { dashboardWindow = null; });
 }
+
 function createSettingsWindow() {
     if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.focus(); return; }
     settingsWindow = new BrowserWindow({
-        width: 400, 
-        height: 580, // 限制初始高度
-        title: "设置", 
-        autoHideMenuBar: true, 
-        resizable: false, 
+        width: 400, height: 580, title: "设置", autoHideMenuBar: true, resizable: false, 
         icon: fs.existsSync(ICON_PATH) ? ICON_PATH : null,
         webPreferences: { nodeIntegration: true, contextIsolation: false }
     });
@@ -341,20 +264,9 @@ ipcMain.on('resize-settings-window', (event, contentHeight) => {
     if (settingsWindow) settingsWindow.setContentSize(400, contentHeight);
 });
 
-
-//  核心补全：开机自启逻辑
 function updateAutoLaunch(isEnabled) {
-    // 只有打包后的 exe 才真正执行注册表操作，避免开发时每次都弹窗
-    if (!app.isPackaged) {
-        console.log('Dev Mode: Auto launch set to', isEnabled);
-        return;
-    }
-    
-    app.setLoginItemSettings({
-        openAtLogin: isEnabled,
-        openAsHidden: false, // 设为 false 确保托盘能出来
-        path: app.getPath('exe')
-    });
+    if (!app.isPackaged) return;
+    app.setLoginItemSettings({ openAtLogin: isEnabled, openAsHidden: false, path: app.getPath('exe') });
 }
 
 function applyConfig() {
@@ -362,139 +274,85 @@ function applyConfig() {
     const config = loadConfig();
     updateAutoLaunch(config.autoLaunch);
 
-    try {
+    if (config.shortcutTranslate) {
         globalShortcut.register(config.shortcutTranslate, () => {
             clipboard.clear();
             triggerCopy();
-
             let attempts = 0;
             const checkTimer = setInterval(() => {
                 attempts++;
                 const text = clipboard.readText().trim();
-                if (text && text.length > 0) {
-                    clearInterval(checkTimer);
-                    showWindowAndTranslate(text);
+                if (text && text.length > 0) { 
+                    clearInterval(checkTimer); 
+                    showWindowAndTranslate(text); 
                 }
-                if (attempts >= 20) clearInterval(checkTimer);
+                if (attempts >= 40) clearInterval(checkTimer); 
             }, 50);
         });
-
+    }
+    if (config.shortcutOcr) {
         globalShortcut.register(config.shortcutOcr, () => startScreenshot());
-    } catch (e) {}
+    }
 }
 
 app.whenReady().then(async () => { 
     createMainWindow(); 
     createTray(); 
     applyConfig();
-
     setTimeout(() => checkUpdate(), 30000);
     setTimeout(() => initOcrEngine(), 1000);
 });
 
-ipcMain.on('settings-updated', () => { applyConfig(); if (mainWindow) mainWindow.webContents.send('config-updated'); });
+ipcMain.on('settings-updated', () => { 
+    applyConfig(); 
+    if (mainWindow) mainWindow.webContents.send('config-updated'); 
+});
 
 async function startScreenshot() {
   try {
-    // 如果上一次截图窗口还没关，先关掉，避免叠层/焦点异常
-    if (screenshotWindow) {
-      try { screenshotWindow.close(); } catch (e) {}
-      screenshotWindow = null;
-    }
-
+    if (screenshotWindow) { try { screenshotWindow.close(); } catch (e) {} screenshotWindow = null; }
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-    // 先拿当前鼠标所在显示器
     const cursorPoint = screen.getCursorScreenPoint();
     const currentDisplay = screen.getDisplayNearestPoint(cursorPoint);
-
-    // 当前显示器的“真实像素尺寸”
     const displayPixelW = Math.floor(currentDisplay.bounds.width * currentDisplay.scaleFactor);
     const displayPixelH = Math.floor(currentDisplay.bounds.height * currentDisplay.scaleFactor);
-
-    /**
-     * 关键修复点：
-     * 某些电脑上 desktopCapturer 返回的 display_id 和 screen 模块的 display.id 映射会互换，
-     * 导致“主屏拿到副屏画面、副屏拿到主屏画面”。
-     *
-     * 这里用一个短暂显示的“洋红色探针”在鼠标位置打点：
-     * - 抓一张小缩略图
-     * - 在每个 source 的缩略图中，去鼠标对应位置采样像素颜色
-     * - 哪个 source 在该点命中洋红色，就说明它才是真正的当前屏幕
-     */
     let preferredSourceId = null;
 
     if (screen.getAllDisplays().length > 1) {
-      const MARKER_SIZE = 22; // 探针方块大小（DIP，不是像素）
+      const MARKER_SIZE = 22; 
       const markerHtml = `<!doctype html><html><body style="margin:0;background:#ff00ff;"></body></html>`;
       let markerWin = null;
-
       try {
         markerWin = new BrowserWindow({
           x: Math.round(cursorPoint.x - MARKER_SIZE / 2),
           y: Math.round(cursorPoint.y - MARKER_SIZE / 2),
-          width: MARKER_SIZE,
-          height: MARKER_SIZE,
-          frame: false,
-          transparent: false,
-          backgroundColor: '#ff00ff',
-          alwaysOnTop: true,
-          skipTaskbar: true,
-          resizable: false,
-          movable: false,
-          focusable: false,
-          hasShadow: false,
-          show: false,
+          width: MARKER_SIZE, height: MARKER_SIZE,
+          frame: false, transparent: false, backgroundColor: '#ff00ff',
+          alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, focusable: false, hasShadow: false, show: false,
           webPreferences: { nodeIntegration: false, contextIsolation: true }
         });
-
-        // 不要挡鼠标事件（即使极端情况下探针没及时消失，也不影响操作）
         markerWin.setIgnoreMouseEvents(true);
         markerWin.setAlwaysOnTop(true, 'screen-saver');
-
         await markerWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(markerHtml));
-
-        // showInactive 更不抢焦点；没有这个方法就用 show()
-        if (typeof markerWin.showInactive === 'function') markerWin.showInactive();
-        else markerWin.show();
-
-        // 等一小会儿，确保探针真的画到屏幕上了
+        if (typeof markerWin.showInactive === 'function') markerWin.showInactive(); else markerWin.show();
         await sleep(80);
-
-        // 抓一张“小缩略图”即可（用来探测，不用高清）
-        const probeSources = await desktopCapturer.getSources({
-          types: ['screen'],
-          thumbnailSize: { width: 420, height: 420 },
-        });
-
-        // 鼠标在当前显示器内的相对位置（先 DIP -> 再转像素）
+        const probeSources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 420, height: 420 } });
         const localDipX = cursorPoint.x - currentDisplay.bounds.x;
         const localDipY = cursorPoint.y - currentDisplay.bounds.y;
         const localPxX = Math.round(localDipX * currentDisplay.scaleFactor);
         const localPxY = Math.round(localDipY * currentDisplay.scaleFactor);
-
-        // 判断是否“洋红色像素”：R/B 高、G 低（BGRA 或 RGBA 都能判）
         const isMarkerPixel = (buf, idx) => {
-          const c0 = buf[idx];
-          const c1 = buf[idx + 1];
-          const c2 = buf[idx + 2];
+          const c0 = buf[idx]; const c1 = buf[idx + 1]; const c2 = buf[idx + 2];
           return c1 < 80 && c0 > 220 && c2 > 220;
         };
-
         for (const s of probeSources) {
           const thumb = s.thumbnail;
           const { width: tw, height: th } = thumb.getSize();
           if (!tw || !th) continue;
-
-          // 把“当前显示器的鼠标像素坐标”映射到这个缩略图坐标
           let tx = Math.round((localPxX / displayPixelW) * tw);
           let ty = Math.round((localPxY / displayPixelH) * th);
-          tx = Math.max(0, Math.min(tw - 1, tx));
-          ty = Math.max(0, Math.min(th - 1, ty));
-
+          tx = Math.max(0, Math.min(tw - 1, tx)); ty = Math.max(0, Math.min(th - 1, ty));
           const buf = thumb.toBitmap();
-
-          // 采样 3x3，避免缩放插值导致“中心点刚好没命中”
           let hits = 0;
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
@@ -504,122 +362,53 @@ async function startScreenshot() {
               if (isMarkerPixel(buf, idx)) hits++;
             }
           }
-
-          if (hits >= 3) {
-            preferredSourceId = s.id; // ✅ 找到了真正对应当前屏幕的 source
-            break;
-          }
+          if (hits >= 3) { preferredSourceId = s.id; break; }
         }
-      } catch (e) {
-        // 探针探测失败就忽略，走后备逻辑
-      } finally {
-        // 关掉探针，避免出现在最终截图里
-        if (markerWin && !markerWin.isDestroyed()) {
-          try { markerWin.hide(); } catch (e) {}
-          try { markerWin.close(); } catch (e) {}
-        }
+      } catch (e) { } finally {
+        if (markerWin && !markerWin.isDestroyed()) { try { markerWin.hide(); markerWin.close(); } catch (e) {} }
         await sleep(80);
       }
     }
 
-    // 现在抓最终“高清图”（仍然只需要当前屏幕像素大小）
-    const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: { width: displayPixelW, height: displayPixelH },
-    });
-
-    let targetSource = null;
-
-    // ✅ 优先用探针锁定到的 source.id（最可靠，解决你说的互换问题）
-    if (preferredSourceId) {
-      targetSource = sources.find(s => s.id === preferredSourceId) || null;
-    }
-
-    // 后备：保留你原来的 display_id 匹配（探针失败时才用）
-    if (!targetSource) {
-      const curU32 = currentDisplay.id >>> 0;
-      targetSource =
-        sources.find(s => {
-          const sid = Number(s.display_id);
-          return !Number.isNaN(sid) && ((sid >>> 0) === curU32);
-        }) ||
-        sources.find(s => s.display_id === String(curU32) || s.display_id === String(currentDisplay.id)) ||
-        sources[0];
-    }
-
-    // 把截图 dataURL 准备好（用 thumbnail，而不是 getUserMedia）
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: displayPixelW, height: displayPixelH } });
+    let targetSource = sources.find(s => s.id === preferredSourceId) || sources.find(s => s.display_id === String(currentDisplay.id)) || sources.find(s => s.display_id === String(currentDisplay.id >>> 0)) || sources[0];
     const imageDataURL = targetSource.thumbnail.toDataURL();
 
-    // 创建截图窗口（覆盖当前显示器）
     screenshotWindow = new BrowserWindow({
-      x: currentDisplay.bounds.x,
-      y: currentDisplay.bounds.y,
-      width: currentDisplay.bounds.width,
-      height: currentDisplay.bounds.height,
-      frame: false,
-      transparent: true,
-      alwaysOnTop: true,
-      skipTaskbar: true,
-      resizable: false,
-      movable: false,
-      enableLargerThanScreen: true,
-      hasShadow: false,
-      show: false,
+      x: currentDisplay.bounds.x, y: currentDisplay.bounds.y,
+      width: currentDisplay.bounds.width, height: currentDisplay.bounds.height,
+      frame: false, transparent: true, alwaysOnTop: true, skipTaskbar: true, resizable: false, movable: false, enableLargerThanScreen: true, hasShadow: false, show: false,
       webPreferences: { nodeIntegration: true, contextIsolation: false }
     });
-
-    // 记录本次截图应该覆盖的区域（ready 时再贴一遍）
     lastShotBounds = { ...currentDisplay.bounds };
-
     screenshotWindow.setAlwaysOnTop(true, 'screen-saver');
     screenshotWindow.moveTop();
     screenshotWindow.setBounds(lastShotBounds, false);
-
     screenshotWindow.loadFile('screenshot.html');
-
     screenshotWindow.webContents.once('did-finish-load', () => {
-      screenshotWindow.webContents.send('SET_SOURCE', {
-        imageDataURL,
-        display: {
-          id: currentDisplay.id,
-          bounds: currentDisplay.bounds,
-          scaleFactor: currentDisplay.scaleFactor
-        },
-        sourceId: targetSource.id
-      });
+      screenshotWindow.webContents.send('SET_SOURCE', { imageDataURL, display: { id: currentDisplay.id, bounds: currentDisplay.bounds, scaleFactor: currentDisplay.scaleFactor }, sourceId: targetSource.id });
     });
-
-  } catch (e) {
-    console.error("启动截图失败:", e);
-    if (mainWindow) mainWindow.webContents.send('ocr-error', "截图错误: " + e.message);
+  } catch (e) { 
+      if (mainWindow) mainWindow.webContents.send('ocr-error', "截图错误: " + e.message); 
   }
 }
 
-
 ipcMain.on('screenshot-ready', () => {
   if (!screenshotWindow) return;
-
-  // ✅ ready 时再贴一次，解决“切主副屏/混合 DPI”导致的覆盖不全
   if (lastShotBounds) screenshotWindow.setBounds(lastShotBounds, false);
-
-  // ✅ 再把层级顶到最高，压过主任务栏（修复双任务栏/露底）
   screenshotWindow.setAlwaysOnTop(true, 'screen-saver');
   screenshotWindow.moveTop();
-
   screenshotWindow.show();
   screenshotWindow.focus();
 });
 
 ipcMain.on('close-screenshot', () => { if (screenshotWindow) { screenshotWindow.close(); screenshotWindow = null; } });
-
 ipcMain.on('screenshot-captured', async (event, dataURL) => {
     if (screenshotWindow) { screenshotWindow.close(); screenshotWindow = null; }
     showWindowAndTranslate("", true); 
     mainWindow.webContents.send('ocr-loading');
-    
     if (!ocrWorker) await initOcrEngine();
     if (!ocrWorker) { mainWindow.webContents.send('ocr-error', "引擎启动失败"); return; }
-
     const base64Data = dataURL.replace(/^data:image\/\w+;base64,/, "");
     const imageBuffer = Buffer.from(base64Data, 'base64');
     try {
@@ -627,30 +416,22 @@ ipcMain.on('screenshot-captured', async (event, dataURL) => {
         const cleanText = text.trim();
         if (!cleanText) mainWindow.webContents.send('ocr-error', "未识别到文字");
         else mainWindow.webContents.send('start-translation', cleanText);
-    } catch (err) { 
-        mainWindow.webContents.send('ocr-error', err.message);
-    }
+    } catch (err) { mainWindow.webContents.send('ocr-error', err.message); }
 });
 
 function showWindowAndTranslate(text, isOcr = false) {
     if (text.length > 3000) return;
-    
     const cursor = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursor);
     const workArea = display.workArea;
-    const width = 340;
-    const height = 180; 
-
+    const width = 340; const height = 180; 
     const x = Math.round(workArea.x + (workArea.width - width) / 2);
     const y = Math.round(workArea.y + (workArea.height - height) / 2);
-
     isPinned = true;
-
     mainWindow.setBounds({ x, y, width, height });
     mainWindow.setAlwaysOnTop(isPinned, 'screen-saver');
     mainWindow.show();
     mainWindow.focus(); 
-    
     if(!isOcr && text) mainWindow.webContents.send('start-translation', text);
     checkUpdate();
 }

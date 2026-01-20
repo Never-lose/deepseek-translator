@@ -4,6 +4,65 @@
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;">
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* ✨ 悬浮圆角透明主题 */
+        
+        /* 1. 当开启透明模式时，修改内部卡片的样式，而不是修改 body */
+        body.transparent-mode .my-ds-popup {
+            /* 半透明黑底色 */
+            background: rgba(0, 0, 0, 0.5) !important;
+            
+            /* 🚀 增加圆角：让它看起来更润 */
+            border-radius: 16px !important; 
+            
+            /* 加上白色细边框，增加精致感 */
+            border: 1px solid rgba(255, 255, 255, 0.25) !important;
+            
+            /* 去掉原本的阴影，改用发光效果 */
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2) !important;
+            
+            /* 强制文字变白 */
+            color: #ffffff !important;
+        }
+
+        /* 2. 强制内部文字带描边，防背景干扰 */
+        body.transparent-mode {
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8) !important;
+        }
+
+        /* 3. 清除内部所有元素的背景，只保留最外层卡片的背景 */
+        body.transparent-mode .ds-header,
+        body.transparent-mode .ds-footer,
+        body.transparent-mode .ds-content,
+        body.transparent-mode .ds-section {
+            background: transparent !important;
+            border: none !important;
+        }
+
+        /* 4. 代码块样式优化 */
+        body.transparent-mode .ds-coding-block {
+            background: rgba(255, 255, 255, 0.1) !important; /* 极淡的白底 */
+            border-left: 3px solid #FFD700 !important;
+            color: #f0f0f0 !important;
+        }
+
+        /* 5. 标题和图标变白 */
+        body.transparent-mode .ds-word-title,
+        body.transparent-mode .ds-word-title-small,
+        body.transparent-mode .icon-btn {
+            color: #ffffff !important;
+        }
+        
+        /* 6. 标签边框化 */
+        body.transparent-mode .ds-tag {
+            background: transparent !important;
+            border: 1px solid rgba(255,255,255,0.4) !important;
+            color: #fff !important;
+        }
+
+        /* 隐藏滚动条 */
+        body.transparent-mode ::-webkit-scrollbar { width: 0px; }
+    </style>
 </head>
 <body>
     <div id="app-container"></div>

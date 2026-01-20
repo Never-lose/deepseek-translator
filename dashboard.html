@@ -209,10 +209,22 @@ tr {
     let allWords = [];    
 
     // 应用主题
-    if (config.darkMode) document.body.classList.add('dark-mode');
-    ipcRenderer.on('theme-changed', (e, dark) => {
-        if (dark) document.body.classList.add('dark-mode');
-        else document.body.classList.remove('dark-mode');
+    function applyTheme(theme) {
+        // 如果是 'dark' 或 'transparent'，都开启深色模式
+        if (theme === 'dark' || theme === 'transparent') {
+            document.body.classList.add('dark-mode');
+        } else {
+            document.body.classList.remove('dark-mode');
+        }
+    }
+
+    // 1. 初始化时读取配置 (优先读取 config.theme，兼容旧版 config.darkMode)
+    const initTheme = config.theme || (config.darkMode ? 'dark' : 'light');
+    applyTheme(initTheme);
+
+    // 2. 监听实时切换信号
+    ipcRenderer.on('theme-changed', (e, theme) => {
+        applyTheme(theme);
     });
 
     // 监听实时刷新信号

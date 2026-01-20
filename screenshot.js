@@ -10,7 +10,6 @@ let scaleY = 1;
 
 ipcRenderer.on('SET_SOURCE', async (event, payload) => {
   try {
-    // 新方案：主进程传的是 { imageDataURL, ... }
     if (payload && typeof payload === 'object' && payload.imageDataURL) {
       const img = new Image();
       img.onload = () => {
@@ -35,7 +34,6 @@ ipcRenderer.on('SET_SOURCE', async (event, payload) => {
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(img, 0, 0, realWidth, realHeight);
 
-        // 背景画好后再显示鼠标
         document.body.style.cursor = 'crosshair';
         ipcRenderer.send('screenshot-ready');
       };
@@ -47,7 +45,6 @@ ipcRenderer.on('SET_SOURCE', async (event, payload) => {
     // 旧方案兜底（可删）：如果你还传 string，就走原来的 getUserMedia
     const sourceId = payload;
     console.warn('[调试] SET_SOURCE 收到旧格式，走 getUserMedia 兜底:', sourceId);
-    // （如果你决定彻底不用旧方案，这段可以直接删除）
   } catch (e) {
     console.error(e);
     ipcRenderer.send('close-screenshot');
